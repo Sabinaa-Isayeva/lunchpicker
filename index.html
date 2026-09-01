@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunch Picker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+        }
+        .amber-btn {
+            background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+            box-shadow: 0 4px 20px 0 rgba(251, 133, 0, 0.45);
+        }
+        .amber-btn:hover {
+            background: linear-gradient(135deg, #ffc300 0%, #ffb703 100%);
+            box-shadow: 0 8px 25px 0 rgba(255, 183, 3, 0.65);
+        }
+
+        .interactive-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .interactive-btn:hover { transform: translateY(-2px) scale(1.03); }
+        .interactive-btn:active { transform: translateY(0px) scale(0.96); }
+        
+        #toast {
+            transition: all 0.3s ease-in-out;
+            transform: translateY(-100px);
+            opacity: 0;
+        }
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12 relative">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 right-5 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 pointer-events-none">
+        <div class="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+            <i class="fa-solid fa-bell"></i>
+        </div>
+        <div>
+            <p id="toast-title" class="text-xs font-bold text-white">Xəbərdarlıq</p>
+            <p id="toast-msg" class="text-[11px] text-slate-400">Əməliyyat icra olundu.</p>
+        </div>
+    </div>
+
+    <!-- Modal (Xəritə/Məsafə) -->
+    <div id="mapModal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-card rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 id="modalTitle" class="font-bold text-slate-900 text-base">Məkan Məlumatı</h3>
+                <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="space-y-3 text-xs text-slate-600">
+                <div class="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
+                    <i class="fa-solid fa-location-dot text-rose-500 text-lg"></i>
+                    <div>
+                        <p class="font-bold text-slate-800" id="modalAddress">Nizami küç. 42</p>
+                        <p class="text-[10px] text-slate-400">Ofisdən məsafə: <b class="text-slate-700" id="modalDist">650 metr (~8 dəq piyada)</b></p>
+                    </div>
+                </div>
+                <div class="h-32 bg-slate-200 rounded-2xl flex items-center justify-center text-slate-400 font-medium">
+                    <i class="fa-solid fa-map-location-dot text-3xl opacity-40 mr-2"></i> [Xəritə Vizualizasiyası]
+                </div>
+            </div>
+            <button onclick="closeModal()" class="w-full bg-slate-900 text-white font-bold text-xs py-3 rounded-xl interactive-btn">
+                Bağla
+            </button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-400/30">
+                    <i class="fa-solid fa-utensils text-lg"></i>
+                </div>
+                <div>
+                    <span class="font-extrabold text-xl tracking-tight text-white">Lunch<span class="text-amber-400">Picker</span></span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pl-2 border-l border-slate-800">
+                <div class="w-9 h-9 rounded-full bg-slate-800 text-amber-400 font-bold text-xs flex items-center justify-center">Sİ</div>
+                <div class="hidden md:block text-left">
+                    <p class="text-xs font-bold text-slate-100">Sabina Isayeva</p>
+                    <p class="text-[10px] text-slate-400 font-medium">Team Lead</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <section class="lg:col-span-8 space-y-6">
+            
+            <!-- Banner / Timer -->
+            <div class="relative overflow-hidden rounded-3xl bg-slate-900 p-8 text-white shadow-xl border border-slate-800">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <div class="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold px-3 py-1 rounded-full mb-3">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>Səsvermə Aktiv</span>
+                        </div>
+                        <h1 class="text-3xl font-extrabold tracking-tight">Cümə Naharı Seçimi</h1>
+                        <div class="mt-3 flex items-center gap-3 text-xs">
+                            <span class="text-slate-400 flex items-center gap-1.5"><i class="fa-regular fa-clock text-amber-400"></i> Bitməsinə qaldı:</span>
+                            <div class="flex items-center gap-1 font-mono font-bold text-slate-900">
+                                <span id="timer-h" class="bg-amber-400 px-2 py-0.5 rounded-md">00</span>:
+                                <span id="timer-m" class="bg-amber-400 px-2 py-0.5 rounded-md">45</span>:
+                                <span id="timer-s" class="bg-amber-400 px-2 py-0.5 rounded-md">30</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="showToast('Sessiya Tənzimlənməsi', 'Təklif əlavə etmə paneli tezliklə açılacaq.')" class="shrink-0 amber-btn interactive-btn text-slate-950 font-bold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-plus-circle text-slate-950 text-base"></i> Təklif Əlavə Et
+                    </button>
+                </div>
+            </div>
+
+            <!-- 1. CANLI AXTARIŞ XANASI -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" oninput="searchRestaurants()" placeholder="Restoran və ya yemək axtar..." class="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition shadow-sm">
+            </div>
+
+            <!-- DÜZƏLDİLMİŞ FİLTRLƏR -->
+            <div class="flex items-center gap-2 overflow-x-auto pb-1">
+                <button onclick="filterCategory('all', this)" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-slate-900 text-white shadow-sm border border-slate-800 interactive-btn shrink-0">
+                    Bütün Mətbəxlər
+                </button>
+                <button onclick="filterCategory('european', this)" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">
+                    European 
+                </button>
+                <button onclick="filterCategory('turkish', this)" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">
+                    Türk
+                </button>
+                <button onclick="filterCategory('asian', this)" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">
+                    Asiya 
+                </button>
+                <button onclick="filterCategory('national', this)" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">
+                    Milli
+                </button>
+            </div>
+
+            <!-- RESTORAN KARTLARI -->
+            <div class="space-y-5">
+                
+                <!-- European Restoranı -->
+                <div class="proposal-card european glass-card rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xl shrink-0">
+                                🍕
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h3 class="text-lg font-bold text-slate-900">Baku Pizza House</h3>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                    <span><i class="fa-solid fa-utensils text-slate-400 mr-1"></i>European</span>
+                                    <span>•</span>
+                                    <span><i class="fa-solid fa-wallet text-slate-400 mr-1"></i>Orta Qiymət: <b>15 AZN</b></span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="openModal('Baku Pizza House', 'Nizami küç. 14', '450 metr (~5 dəq piyada)')" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition text-xs font-bold">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </button>
+                            <div class="flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-2xl border border-slate-800 shrink-0">
+                                <span class="vote-count text-white font-extrabold text-base">4</span>
+                                <span class="text-slate-400 text-xs font-medium">Səs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Təklif Edilən Menyular:</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">
+                                Margarita Pizza
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">
+                                Pepperoni Special
+                            </span>
+                        </div>
+                    </div>
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-900 text-amber-400 flex items-center justify-center text-[10px] font-bold">ƏM</div>
+                            <span class="text-xs text-slate-500">Təklif etdi: <b class="text-slate-700">Əli Məmmədov</b></span>
+                        </div>
+                        <button onclick="toggleVote(this, 'Baku Pizza House')" class="amber-btn interactive-btn text-slate-950 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+                            <i class="fa-solid fa-heart text-slate-950"></i> <span class="btn-text">Səs Ver</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Turkish Restoranı -->
+                <div class="proposal-card turkish glass-card rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xl shrink-0">
+                                🥙
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-900">Anadolu Kebap</h3>
+                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                    <span><i class="fa-solid fa-utensils text-slate-400 mr-1"></i>Türk</span>
+                                    <span>•</span>
+                                    <span><i class="fa-solid fa-wallet text-slate-400 mr-1"></i>Orta Qiymət: <b>12 AZN</b></span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="openModal('Anadolu Kebap', 'Füzuli küç. 88', '1.2 km (~15 dəq piyada)')" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition text-xs font-bold">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </button>
+                            <div class="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-2xl border border-slate-200 shrink-0">
+                                <span class="vote-count text-slate-800 font-extrabold text-base">2</span>
+                                <span class="text-slate-500 text-xs font-medium">Səs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Təklif Edilən Menyular:</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">
+                                Tavuk Şiş Menü
+                            </span>
+                        </div>
+                    </div>
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold">LK</div>
+                            <span class="text-xs text-slate-500">Təklif etdi: <b class="text-slate-700">Leyla Əliyeva</b></span>
+                        </div>
+                        <button onclick="toggleVote(this, 'Anadolu Kebap')" class="bg-slate-100 hover:bg-slate-900 hover:text-amber-400 interactive-btn text-slate-800 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+                            <i class="fa-regular fa-heart"></i> <span class="btn-text">Səs Ver</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- National Restoranı -->
+                <div class="proposal-card national glass-card rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xl shrink-0">
+                                🍲
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-900">Dolma House</h3>
+                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                    <span><i class="fa-solid fa-utensils text-slate-400 mr-1"></i>Milli</span>
+                                    <span>•</span>
+                                    <span><i class="fa-solid fa-wallet text-slate-400 mr-1"></i>Orta Qiymət: <b>14 AZN</b></span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="openModal('Dolma House', 'Təbriz küç. 12', '800 metr (~10 dəq piyada)')" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition text-xs font-bold">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </button>
+                            <div class="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-2xl border border-slate-200 shrink-0">
+                                <span class="vote-count text-slate-800 font-extrabold text-base">3</span>
+                                <span class="text-slate-500 text-xs font-medium">Səs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Təklif Edilən Menyular:</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">
+                                Yarpaq Dolması
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">
+                                Şəki Piti
+                            </span>
+                        </div>
+                    </div>
+                    <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold">FA</div>
+                            <span class="text-xs text-slate-500">Təklif etdi: <b class="text-slate-700">Fariz Ağayev</b></span>
+                        </div>
+                        <button onclick="toggleVote(this, 'Dolma House')" class="bg-slate-100 hover:bg-slate-900 hover:text-amber-400 interactive-btn text-slate-800 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+                            <i class="fa-regular fa-heart"></i> <span class="btn-text">Səs Ver</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Sidebar -->
+        <aside class="lg:col-span-4 space-y-6">
+            <div class="glass-card rounded-3xl p-6 shadow-sm border border-amber-200/60 bg-amber-50/30">
+                <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2 text-base">
+                    <i class="fa-solid fa-calculator text-amber-600"></i> Büdcə Analizatoru
+                </h3>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between text-slate-600">
+                        <span>Orta Xərc / Nəfər:</span>
+                        <b class="text-slate-900">13.50 AZN</b>
+                    </div>
+                    <div class="flex justify-between text-slate-600">
+                        <span>Lider Restoran Büdcəsi:</span>
+                        <b class="text-amber-700 font-bold">15.00 AZN</b>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-6 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-slate-900 flex items-center gap-2 text-base">
+            <i class="fa-solid fa-users text-slate-700"></i> İştirakçılar
+        </h3>
+        <span class="text-xs font-extrabold text-slate-950 bg-amber-400 px-2.5 py-1 rounded-full shadow-sm">3/4 Səs Verib</span>
+    </div>
+    <div class="space-y-3">
+        <!-- 1. Əli Məmmədov -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-900 text-amber-400 font-bold text-xs flex items-center justify-center">ƏM</div>
+                <div>
+                    <p class="text-xs font-bold text-slate-800">Əli Məmmədov</p>
+                    <p class="text-[10px] text-slate-400">DevOps Engineer</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> Səs Verdi
+            </span>
+        </div>
+
+        <!-- 2. Leyla Əliyeva -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-900 text-amber-400 font-bold text-xs flex items-center justify-center">LƏ</div>
+                <div>
+                    <p class="text-xs font-bold text-slate-800">Leyla Əliyeva</p>
+                    <p class="text-[10px] text-slate-400">UI/UX Designer</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> Səs Verdi
+            </span>
+        </div>
+
+        <!-- 3. Sabina Isayeva -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-900 text-amber-400 font-bold text-xs flex items-center justify-center">Sİ</div>
+                <div>
+                    <p class="text-xs font-bold text-slate-800">Sabina Isayeva</p>
+                    <p class="text-[10px] text-slate-400">Team Lead</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <i class="fa-solid fa-check"></i> Səs Verdi
+            </span>
+        </div>
+
+        <!-- 4. Rəşad Qasımov (Gözləyir) -->
+        <div class="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition opacity-75">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 font-bold text-xs flex items-center justify-center">RQ</div>
+                <div>
+                    <p class="text-xs font-bold text-slate-800">Rəşad Qasımov</p>
+                    <p class="text-[10px] text-slate-400">Backend Developer</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <i class="fa-regular fa-clock"></i> Gözləyir
+            </span>
+        </div>
+    </div>
+</div>
+
+    <!-- JS FUNKSİYALARI -->
+    <script>
+        // Taymer
+        let totalSeconds = 2730;
+        setInterval(() => {
+            if (totalSeconds <= 0) return;
+            totalSeconds--;
+            const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+            const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+            const s = String(totalSeconds % 60).padStart(2, '0');
+            document.getElementById('timer-h').innerText = h;
+            document.getElementById('timer-m').innerText = m;
+            document.getElementById('timer-s').innerText = s;
+        }, 1000);
+
+        // Toast
+        function showToast(title, message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-msg').innerText = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Dəvət Linki Kopyala
+        
+        // CANLI AXTARIŞ
+        function searchRestaurants() {
+            let input = document.getElementById('searchInput').value.toLowerCase();
+            let cards = document.querySelectorAll('.proposal-card');
+
+            cards.forEach(card => {
+                let content = card.innerText.toLowerCase();
+                if (content.includes(input)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        // KATEQORİYA FİLTRİ
+        function filterCategory(cat, btn) {
+            if(document.getElementById('searchInput')) {
+                document.getElementById('searchInput').value = '';
+            }
+
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.className = "filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0";
+            });
+            btn.className = "filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-slate-900 text-white shadow-sm border border-slate-800 interactive-btn shrink-0";
+
+            document.querySelectorAll('.proposal-card').forEach(card => {
+                if (cat === 'all' || card.classList.contains(cat)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        // SƏSVERMƏ
+        function toggleVote(btn, restaurantName) {
+            const card = btn.closest('.proposal-card');
+            const voteCountEl = card.querySelector('.vote-count');
+            let currentVotes = parseInt(voteCountEl.innerText);
+            const btnText = btn.querySelector('.btn-text');
+
+            if (btn.classList.contains('voted')) {
+                btn.classList.remove('voted');
+                voteCountEl.innerText = currentVotes - 1;
+                btnText.innerText = "Səs Ver";
+                btn.className = "bg-slate-100 hover:bg-slate-900 hover:text-amber-400 interactive-btn text-slate-800 text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2";
+                btn.querySelector('i').className = "fa-regular fa-heart";
+                showToast("Səs Ləğv Edildi", `${restaurantName} üçün səsini geri aldın.`);
+            } else {
+                btn.classList.add('voted');
+                voteCountEl.innerText = currentVotes + 1;
+                btnText.innerText = "Səsin Qeydə Alındı";
+                btn.className = "bg-amber-500/10 text-amber-600 border border-amber-400/40 interactive-btn text-xs font-extrabold px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm voted";
+                btn.querySelector('i').className = "fa-solid fa-circle-check text-amber-500";
+                showToast("Uğurlu Səs!", `${restaurantName} üçün səsin təsdiqləndi.`);
+            }
+        }
+
+        // MODAL VƏ KƏNARA KLİKLƏ BAĞLANMA
+        function openModal(name, address, dist) {
+            document.getElementById('modalTitle').innerText = name;
+            document.getElementById('modalAddress').innerText = address;
+            document.getElementById('modalDist').innerText = dist;
+            document.getElementById('mapModal').classList.remove('hidden');
+            document.getElementById('mapModal').classList.add('flex');
+        }
+        function closeModal() {
+            document.getElementById('mapModal').classList.add('hidden');
+            document.getElementById('mapModal').classList.remove('flex');
+        }
+
+        window.onclick = function(event) {
+            let modal = document.getElementById('mapModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>

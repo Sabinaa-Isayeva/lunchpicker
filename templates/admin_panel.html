@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Paneli - Lunch Picker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
+        .glass-card { background: #ffffff; border: 1px solid #e2e8f0; }
+        .amber-btn {
+            background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+            box-shadow: 0 4px 20px 0 rgba(251, 133, 0, 0.45);
+        }
+        .amber-btn:hover {
+            background: linear-gradient(135deg, #ffc300 0%, #ffb703 100%);
+            box-shadow: 0 8px 25px 0 rgba(255, 183, 3, 0.65);
+        }
+        .interactive-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+        .interactive-btn:hover { transform: translateY(-2px) scale(1.03); }
+        .interactive-btn:active { transform: translateY(0px) scale(0.96); }
+        #toast { transition: all 0.3s ease-in-out; transform: translateY(-100px); opacity: 0; }
+        #toast.show { transform: translateY(0); opacity: 1; }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12">
+
+    <!-- Toast -->
+    <div id="toast" class="fixed top-5 right-5 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 pointer-events-none">
+        <div class="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+            <i class="fa-solid fa-bell"></i>
+        </div>
+        <div>
+            <p id="toast-title" class="text-xs font-bold text-white"></p>
+            <p id="toast-msg" class="text-[11px] text-slate-400"></p>
+        </div>
+    </div>
+
+    <!-- Access gate -->
+    <div id="gate" class="fixed inset-0 z-40 bg-slate-950 hidden items-center justify-center p-4">
+        <div class="glass-card rounded-3xl p-8 text-center max-w-sm">
+            <i class="fa-solid fa-lock text-3xl text-slate-400 mb-3 block"></i>
+            <p id="gateMsg" class="text-xs font-bold text-slate-600">Yüklənir...</p>
+        </div>
+    </div>
+
+    <div id="appScreen" class="hidden">
+        <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-400/30">
+                        <i class="fa-solid fa-user-shield text-lg"></i>
+                    </div>
+                    <span class="font-extrabold text-xl tracking-tight text-white">Admin <span class="text-amber-400">Paneli</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="/food-admin/" class="flex items-center gap-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition">
+                        <i class="fa-solid fa-bowl-food text-amber-400"></i> Yemək İdarəsi
+                    </a>
+                    <a href="/" class="flex items-center gap-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition">
+                        <i class="fa-solid fa-arrow-left text-amber-400"></i> Tətbiqə qayıt
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
+
+            <!-- Stats + filters -->
+            <div class="glass-card rounded-3xl p-6 shadow-sm">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h2 class="font-bold text-slate-900 flex items-center gap-2 text-base">
+                        <i class="fa-solid fa-ticket text-amber-600"></i> Nahar Təklifləri (Ticketlər)
+                    </h2>
+                    <div id="statusTabs" class="flex rounded-xl bg-slate-100 p-1 text-[11px] font-extrabold shrink-0">
+                        <button data-status="pending" onclick="setStatus('pending', this)" class="tab-btn px-3 py-1.5 rounded-lg bg-slate-900 text-white whitespace-nowrap">Gözləyən</button>
+                        <button data-status="approved" onclick="setStatus('approved', this)" class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 whitespace-nowrap">Təsdiqlənmiş</button>
+                        <button data-status="rejected" onclick="setStatus('rejected', this)" class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 whitespace-nowrap">Rədd</button>
+                        <button data-status="all" onclick="setStatus('all', this)" class="tab-btn px-3 py-1.5 rounded-lg text-slate-600 whitespace-nowrap">Hamısı</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mt-4">
+                    <div class="rounded-2xl bg-slate-50 border border-slate-200 p-3">
+                        <p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">Gözləyən</p>
+                        <p id="statPending" class="text-xl font-black text-slate-800">—</p>
+                    </div>
+                    <div class="rounded-2xl bg-emerald-50 border border-emerald-200 p-3">
+                        <p class="text-[10px] font-extrabold text-emerald-500 uppercase tracking-wide">Təsdiqlənmiş</p>
+                        <p id="statApproved" class="text-xl font-black text-emerald-700">—</p>
+                    </div>
+                    <div class="rounded-2xl bg-rose-50 border border-rose-200 p-3">
+                        <p class="text-[10px] font-extrabold text-rose-400 uppercase tracking-wide">Rədd edilmiş</p>
+                        <p id="statRejected" class="text-xl font-black text-rose-600">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ticket list -->
+            <div class="space-y-3" id="ticketList"></div>
+        </main>
+    </div>
+
+    <script src="/static/admin_panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-django coverage
+
+      - name: Run checks
+        run: python manage.py check
+
+      - name: Run migrations check
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest tests/
+          coverage report --fail-under=70

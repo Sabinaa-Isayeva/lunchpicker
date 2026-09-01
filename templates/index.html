@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunch Picker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+        }
+        .amber-btn {
+            background: linear-gradient(135deg, #ffb703 0%, #fb8500 100%);
+            box-shadow: 0 4px 20px 0 rgba(251, 133, 0, 0.45);
+        }
+        .amber-btn:hover {
+            background: linear-gradient(135deg, #ffc300 0%, #ffb703 100%);
+            box-shadow: 0 8px 25px 0 rgba(255, 183, 3, 0.65);
+        }
+
+        .interactive-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .interactive-btn:hover { transform: translateY(-2px) scale(1.03); }
+        .interactive-btn:active { transform: translateY(0px) scale(0.96); }
+
+        #toast {
+            transition: all 0.3s ease-in-out;
+            transform: translateY(-100px);
+            opacity: 0;
+        }
+        #toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12 relative">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed top-5 right-5 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 pointer-events-none">
+        <div class="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+            <i class="fa-solid fa-bell"></i>
+        </div>
+        <div>
+            <p id="toast-title" class="text-xs font-bold text-white"></p>
+            <p id="toast-msg" class="text-[11px] text-slate-400"></p>
+        </div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="authScreen" class="fixed inset-0 z-40 bg-slate-950 flex items-center justify-center p-4 hidden">
+        <div class="w-full max-w-sm">
+            <div class="flex items-center gap-3 justify-center mb-6">
+                <div class="w-12 h-12 rounded-xl bg-amber-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-400/30">
+                    <i class="fa-solid fa-utensils text-xl"></i>
+                </div>
+                <span class="font-extrabold text-2xl tracking-tight text-white">Lunch<span class="text-amber-400">Picker</span></span>
+            </div>
+            <div class="glass-card rounded-3xl p-7 space-y-4 shadow-2xl">
+                <div class="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+                    <button id="tabLogin" onclick="switchTab('login')" class="flex-1 py-2 rounded-lg bg-slate-900 text-white">Daxil ol</button>
+                    <button id="tabSignup" onclick="switchTab('signup')" class="flex-1 py-2 rounded-lg text-slate-600">Qeydiyyat</button>
+                </div>
+
+                <div id="signupFields" class="space-y-3 hidden">
+                    <input id="su-first" type="text" placeholder="Ad" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20">
+                    <input id="su-last" type="text" placeholder="Soyad" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20">
+                    <input id="su-email" type="email" placeholder="Email" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20">
+                </div>
+
+                <input id="au-username" type="text" placeholder="İstifadəçi adı" autocomplete="username" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20">
+                <input id="au-password" type="password" placeholder="Şifrə" autocomplete="current-password" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20">
+
+                <p id="authError" class="hidden text-[11px] font-bold text-rose-600"></p>
+
+                <button id="authSubmit" onclick="submitAuth()" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i> Daxil ol
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal (Məkan) -->
+    <div id="mapModal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-card rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 id="modalTitle" class="font-bold text-slate-900 text-base">Məkan Məlumatı</h3>
+                <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="space-y-3 text-xs text-slate-600">
+                <div class="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3">
+                    <i class="fa-solid fa-location-dot text-rose-500 text-lg"></i>
+                    <div>
+                        <p class="font-bold text-slate-800" id="modalAddress"></p>
+                        <p class="text-[10px] text-slate-400">Qiymət aralığı: <b class="text-slate-700" id="modalDist"></b></p>
+                    </div>
+                </div>
+            </div>
+            <button onclick="closeModal()" class="w-full bg-slate-900 text-white font-bold text-xs py-3 rounded-xl interactive-btn">Bağla</button>
+        </div>
+    </div>
+
+    <!-- Suggestion Ticket Modal -->
+    <div id="suggestModal" class="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-card rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-base">Nahar Təklifi Göndər</h3>
+                <button onclick="closeSuggestModal()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <p class="text-[11px] text-slate-400 -mt-2">Təklifiniz admin təsdiqindən sonra səsverməyə çıxarılacaq.</p>
+            <div class="space-y-3 text-xs">
+                <label class="block">
+                    <span class="font-bold text-slate-600">Restoran</span>
+                    <select id="sgRestaurant" onchange="onSuggestRestaurantChange()" class="mt-1 w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-semibold focus:outline-none focus:border-amber-400"></select>
+                </label>
+                <label class="block">
+                    <span class="font-bold text-slate-600">Menyu məhsulları (isteğe bağlı)</span>
+                    <div id="sgMenuItems" class="mt-1 max-h-32 overflow-y-auto space-y-1.5 p-2 rounded-xl bg-slate-50 border border-slate-200"></div>
+                </label>
+                <label class="block">
+                    <span class="font-bold text-slate-600">Qeyd</span>
+                    <input id="sgNote" type="text" placeholder="Məs: hər kəsə pizza gəlsin" class="mt-1 w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-semibold focus:outline-none focus:border-amber-400">
+                </label>
+            </div>
+            <button onclick="submitSuggestion()" id="sgSubmitBtn" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl">
+                Təklifi Göndər
+            </button>
+        </div>
+    </div>
+
+    <!-- App -->
+    <div id="appScreen" class="hidden">
+    <!-- Header -->
+    <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-400/30">
+                    <i class="fa-solid fa-utensils text-lg"></i>
+                </div>
+                <span class="font-extrabold text-xl tracking-tight text-white">Lunch<span class="text-amber-400">Picker</span></span>
+            </div>
+
+            <div class="flex items-center gap-3 pl-2 border-l border-slate-800">
+                <div class="relative">
+                    <button onclick="toggleNotifications(event)" class="w-9 h-9 rounded-full bg-slate-800 text-slate-300 hover:text-amber-400 flex items-center justify-center transition" title="Bildirişlər">
+                        <i class="fa-solid fa-bell text-sm"></i>
+                        <span id="notifBadge" class="hidden absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[16px]"></span>
+                    </button>
+                    <div id="notifPanel" class="hidden absolute right-0 top-11 w-80 glass-card rounded-2xl shadow-2xl z-50 overflow-hidden">
+                        <div class="flex items-center justify-between p-3 border-b border-slate-100">
+                            <p class="text-xs font-bold text-slate-800">Bildirişlər</p>
+                            <button onclick="markAllRead()" class="text-[10px] font-extrabold text-amber-700 hover:underline">Hamısını oxundu</button>
+                        </div>
+                        <div id="notifList" class="p-2 space-y-1 max-h-72 overflow-y-auto"></div>
+                    </div>
+                </div>
+                <div id="avatar" class="w-9 h-9 rounded-full bg-slate-800 text-amber-400 font-bold text-xs flex items-center justify-center"></div>
+                <div class="hidden md:block text-left">
+                    <p id="userFullName" class="text-xs font-bold text-slate-100"></p>
+                    <p id="userName" class="text-[10px] text-slate-400 font-medium"></p>
+                </div>
+                <button onclick="logout()" title="Çıxış" class="ml-2 w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center transition">
+                    <i class="fa-solid fa-right-from-bracket text-xs"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <section class="lg:col-span-8 space-y-6">
+
+            <!-- Banner / Timer -->
+            <div class="relative overflow-hidden rounded-3xl bg-slate-900 p-8 text-white shadow-xl border border-slate-800">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <div class="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold px-3 py-1 rounded-full mb-3">
+                            <span id="sessionDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span id="sessionStatus">Yüklənir...</span>
+                        </div>
+                        <h1 id="sessionTitle" class="text-3xl font-extrabold tracking-tight">—</h1>
+                        <div class="mt-3 flex items-center gap-3 text-xs">
+                            <span class="text-slate-400 flex items-center gap-1.5"><i class="fa-regular fa-clock text-amber-400"></i> Bitməsinə qaldı:</span>
+                            <div class="flex items-center gap-1 font-mono font-bold text-slate-900">
+                                <span id="timer-h" class="bg-amber-400 px-2 py-0.5 rounded-md">00</span>:
+                                <span id="timer-m" class="bg-amber-400 px-2 py-0.5 rounded-md">00</span>:
+                                <span id="timer-s" class="bg-amber-400 px-2 py-0.5 rounded-md">00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="cloneSession()" id="cloneBtn" class="hidden shrink-0 bg-white text-slate-900 border border-slate-200 interactive-btn font-bold px-4 py-3 rounded-2xl flex items-center gap-2 text-xs"><i class="fa-solid fa-copy"></i> Klonla</button>
+                        <button onclick="addProposal()" class="shrink-0 amber-btn interactive-btn text-slate-950 font-bold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm">
+                            <i class="fa-solid fa-plus-circle text-slate-950 text-base"></i> Təklif Əlavə Et
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Axtarış -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput" oninput="filterCards()" placeholder="Restoran və ya yemək axtar..." class="w-full pl-11 pr-4 py-3 rounded-2xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20 transition shadow-sm">
+            </div>
+
+            <!-- Filtlrər -->
+            <div class="flex items-center gap-2 overflow-x-auto pb-1" id="filterBar">
+                <button onclick="setFilter('all', this)" data-filter="all" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-slate-900 text-white shadow-sm border border-slate-800 interactive-btn shrink-0">Bütün Mətbəxlər</button>
+                <button onclick="setFilter('european', this)" data-filter="european" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">European</button>
+                <button onclick="setFilter('turkish', this)" data-filter="turkish" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">Türk</button>
+                <button onclick="setFilter('asian', this)" data-filter="asian" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">Asiya</button>
+                <button onclick="setFilter('national', this)" data-filter="national" class="filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0">Milli</button>
+                <button id="vegFilterBtn" onclick="toggleVegFilter(this)" class="text-xs font-bold px-4 py-2 rounded-xl bg-white text-emerald-700 border border-emerald-200 interactive-btn shrink-0">☘️ Veg</button>
+            </div>
+
+            <!-- Qrup Yeməkləri başlığı -->
+            <div id="groupFoodSection" class="glass-card rounded-2xl p-4 flex items-center justify-between border border-slate-200/60 bg-white">
+                <div>
+                    <h2 class="font-extrabold text-slate-900 text-sm flex items-center gap-2"><i class="fa-solid fa-layer-group text-amber-600"></i> Qrup Yeməkləri — Kateqoriyalar</h2>
+                    <p class="text-[11px] text-slate-400 font-semibold">Bütün istifadəçilər görür və səs verə bilər</p>
+                </div>
+                <span class="text-[10px] font-bold bg-slate-900 text-white px-2.5 py-1 rounded-full">qrup sifarişi</span>
+            </div>
+
+            <!-- Təkliflər -->
+            <div class="space-y-5" id="proposalList">
+                <div class="glass-card rounded-3xl p-8 text-center text-xs font-semibold text-slate-400">Təkliflər yüklənir...</div>
+            </div>
+        </section>
+
+        <!-- Sidebar -->
+        <aside class="lg:col-span-4 space-y-6">
+            <div class="glass-card rounded-3xl p-6 shadow-sm border border-amber-200/60 bg-amber-50/30">
+                <h3 class="font-bold text-slate-900 mb-3 flex items-center gap-2 text-base">
+                    <i class="fa-solid fa-calculator text-amber-600"></i> Büdcə Analizatoru
+                </h3>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between text-slate-600">
+                        <span>Orta Xərc / Nəfər:</span>
+                        <b class="text-slate-900" id="avgCost">—</b>
+                    </div>
+                    <div class="flex justify-between text-slate-600">
+                        <span>Lider Restoran Büdcəsi:</span>
+                        <b class="text-amber-700 font-bold" id="leaderCost">—</b>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-6 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-bold text-slate-900 flex items-center gap-2 text-base">
+                        <i class="fa-solid fa-users text-slate-700"></i> İştirakçılar
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button id="inviteBtn" onclick="generateInvite()" class="hidden text-[10px] font-extrabold text-slate-700 bg-slate-100 hover:bg-amber-100 border border-slate-200 px-2 py-1 rounded-lg transition" title="Dəvət linki yarat">
+                            <i class="fa-solid fa-link mr-1 text-amber-600"></i> Dəvət
+                        </button>
+                        <span id="voteProgress" class="text-xs font-extrabold text-slate-950 bg-amber-400 px-2.5 py-1 rounded-full shadow-sm">—</span>
+                    </div>
+                </div>
+                <div class="space-y-3" id="participantList"></div>
+            </div>
+        </aside>
+        <!-- Admin Panel — 2 məntiq -->
+        <aside id="adminPanel" class="lg:col-span-4 space-y-6 hidden">
+            <div class="glass-card rounded-3xl p-6 shadow-sm border-2 border-dashed border-slate-300">
+                <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2 text-base">
+                    <i class="fa-solid fa-user-shield text-slate-700"></i> Admin Paneli
+                    <a href="/admin-panel/" class="ml-auto text-[10px] font-extrabold text-slate-700 bg-slate-100 hover:bg-amber-100 border border-slate-200 px-2.5 py-1 rounded-lg transition">
+                        <i class="fa-solid fa-ticket mr-1 text-amber-600"></i> Ticket İdarəsi
+                        <span id="pendingBadge" class="hidden ml-1 bg-rose-500 text-white px-1.5 rounded-full"></span>
+                    </a>
+                    <a href="/food-admin/" class="text-[10px] font-extrabold text-slate-700 bg-slate-100 hover:bg-amber-100 border border-slate-200 px-2.5 py-1 rounded-lg transition">
+                        <i class="fa-solid fa-bowl-food mr-1 text-amber-600"></i> Yeməklər
+                    </a>
+                </h3>
+
+                <!-- 2 böyük düymə -->
+                <div class="grid grid-cols-1 gap-3 mb-5">
+                    <button onclick="document.getElementById('nsTitle').focus(); document.getElementById('bigSessionBox').open = true; document.getElementById('bigSessionBox').scrollIntoView({behavior:'smooth', block:'center'})" class="w-full amber-btn interactive-btn text-slate-950 font-extrabold text-xs py-3.5 rounded-2xl flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-base"></i> Böyük Sessiya / Elan — Səsvermə
+                    </button>
+                    <button onclick="document.getElementById('groupFoodBox').open = true; document.getElementById('groupFoodSection').scrollIntoView({behavior:'smooth'})" class="w-full bg-slate-900 hover:bg-slate-800 interactive-btn text-white font-bold text-xs py-3.5 rounded-2xl flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-layer-group text-amber-400"></i> Qrup Yeməkləri — Kateqoriyalı (hamı səs verir)
+                    </button>
+                </div>
+                <p class="text-[10px] text-slate-400 font-semibold mb-4">Yuxarıdakı sessiya böyük elan/səsvermə üçündür. Aşağıdakı kateqoriyalı təklifləri bütün istifadəçilər görüb səs verə bilər.</p>
+
+                <!-- Pending suggestion tickets -->
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Gözləyən Təkliflər</p>
+                <div id="pendingTickets" class="space-y-2 mb-5"></div>
+
+                <!-- Create lunch session — Böyük elan -->
+                <details id="bigSessionBox" class="mb-3 group" open>
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-amber-600"></i> Böyük Sessiya / Elan Yarat
+                    </summary>
+                    <div class="mt-3 space-y-2">
+                        <input id="nsTitle" type="text" placeholder="Başlıq (məs: Cümə Böyük Səsverməsi)" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input id="nsStart" type="datetime-local" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                            <input id="nsEnd" type="datetime-local" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                        </div>
+                        <label class="flex items-center gap-2 text-[11px] font-bold text-slate-600 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl">
+                            <input id="nsAnnouncement" type="checkbox" class="rounded border-slate-300"> Elan kimi göstər (yuxarıda böyük banner)
+                        </label>
+                        <select id="nsAlgorithm" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                            <option value="majority">Çoxluq səsi</option>
+                            <option value="random">Təsadüfi seçim</option>
+                            <option value="weighted">Çəkili üstünlük</option>
+                        </select>
+                        <button onclick="createSession()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2.5 rounded-xl interactive-btn">Yarat</button>
+                    </div>
+                </details>
+
+                <!-- Add restaurant / food — Qrup yeməkləri -->
+                <details id="groupFoodBox">
+                    <summary class="text-xs font-bold text-slate-700 cursor-pointer flex items-center gap-2">
+                        <i class="fa-solid fa-bowl-food text-amber-600"></i> Qrup Yeməyi / Restoran Əlavə Et
+                    </summary>
+                    <div class="mt-3 space-y-2">
+                        <button onclick="toggleAddMode('restaurant')" id="modeRestaurantBtn" class="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-900 text-white">Yeni Restoran</button>
+                        <button onclick="toggleAddMode('food')" id="modeFoodBtn" class="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200">Mövcud Restorana Yemək</button>
+
+                        <input id="frName" type="text" placeholder="Restoran adı / Yemək adı" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+
+                        <label id="frCuisineWrap" class="block">
+                            <select id="frCuisine" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                                <option value="european">European</option>
+                                <option value="turkish">Türk</option>
+                                <option value="asian">Asiya</option>
+                                <option value="national">Milli</option>
+                            </select>
+                        </label>
+
+                        <label id="frParentWrap" class="hidden block">
+                            <select id="frParent" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400"></select>
+                        </label>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <input id="frPrice" type="number" step="0.5" min="0" placeholder="Qiymət AZN" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                            <input id="frAddress" type="text" placeholder="Ünvan" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
+                        </div>
+
+                        <label class="flex items-center gap-2 text-[11px] font-bold text-slate-600">
+                            <input id="frVeg" type="checkbox" class="rounded border-slate-300"> Vegetarian
+                        </label>
+
+                        <button onclick="submitFood()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2.5 rounded-xl interactive-btn">Əlavə Et</button>
+                    </div>
+                </details>
+            </div>
+        </aside>
+    </main>
+    </div>
+
+    <script>
+        const API = '/api';
+        let accessToken = localStorage.getItem('access');
+        let currentSession = null;
+        let currentUser = null;
+        let myVotes = {};          // proposalId -> voteId
+        let activeFilter = 'all';
+        let restaurantsCache = [];
+        let addMode = 'restaurant';
+
+        // ---------- API helper ----------
+        async function api(path, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
+            const res = await fetch(API + path, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null,
+            });
+            if (res.status === 401 && localStorage.getItem('refresh')) {
+                const refreshed = await fetch(API + '/auth/token/refresh/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh: localStorage.getItem('refresh') }),
+                });
+                if (refreshed.ok) {
+                    const data = await refreshed.json();
+                    accessToken = data.access;
+                    localStorage.setItem('access', accessToken);
+                    headers['Authorization'] = 'Bearer ' + accessToken;
+                    return fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : null });
+                }
+                logout();
+            }
+            if (!res.ok && res.status !== 204) {
+                const err = await res.json().catch(() => ({}));
+                throw Object.assign(new Error('API error'), { status: res.status, data: err });
+            }
+            if (res.status === 204) return null;
+            return res.json();
+        }
+
+        function paginated(json) { return json.results !== undefined ? json.results : json; }
+
+        // ---------- Toast ----------
+        function showToast(title, message) {
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-msg').innerText = message;
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ---------- Auth ----------
+        function switchTab(tab) {
+            const login = tab === 'login';
+            document.getElementById('signupFields').classList.toggle('hidden', login);
+            document.getElementById('tabLogin').className = 'flex-1 py-2 rounded-lg ' + (login ? 'bg-slate-900 text-white' : 'text-slate-600');
+            document.getElementById('tabSignup').className = 'flex-1 py-2 rounded-lg ' + (!login ? 'bg-slate-900 text-white' : 'text-slate-600');
+            document.querySelector('#authSubmit span, #authSubmit i').className = login ? 'fa-solid fa-right-to-bracket' : 'fa-solid fa-user-plus';
+            document.getElementById('authSubmit').lastChild.textContent = login ? ' Daxil ol' : ' Qeydiyyatdan keç';
+            hideAuthError();
+        }
+
+        function showAuthError(msg) {
+            const el = document.getElementById('authError');
+            el.innerText = msg;
+            el.classList.remove('hidden');
+        }
+        function hideAuthError() { document.getElementById('authError').classList.add('hidden'); }
+
+        async function submitAuth() {
+            hideAuthError();
+            const username = document.getElementById('au-username').value.trim();
+            const password = document.getElementById('au-password').value;
+            if (!username || !password) { showAuthError('İstifadəçi adı və şifrə daxil edin.'); return; }
+
+            try {
+                const isSignup = !document.getElementById('signupFields').classList.contains('hidden');
+                if (isSignup) {
+                    await api('/users/', 'POST', {
+                        username,
+                        password,
+                        email: document.getElementById('su-email').value.trim(),
+                        first_name: document.getElementById('su-first').value.trim(),
+                        last_name: document.getElementById('su-last').value.trim(),
+                    });
+                }
+                const res = await fetch(API + '/auth/token/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+                if (!res.ok) { showAuthError('İstifadəçi adı və ya şifrə yanlışdır.'); return; }
+                const tokens = await res.json();
+                accessToken = tokens.access;
+                localStorage.setItem('access', accessToken);
+                localStorage.setItem('refresh', tokens.refresh);
+                localStorage.setItem('username', username);
+                const pendingJoin = localStorage.getItem('pending_join');
+                if (pendingJoin) {
+                    localStorage.removeItem('pending_join');
+                    window.location.href = '/join/' + pendingJoin + '/';
+                    return;
+                }
+                enterApp();
+            } catch (e) {
+                showAuthError(formatApiError(e));
+            }
+        }
+
+        function formatApiError(e) {
+            if (!e.data) return 'Xəta baş verdi.';
+            for (const key in e.data) {
+                const v = e.data[key];
+                return Array.isArray(v) ? v.join(' ') : String(v);
+            }
+            return 'Xəta baş verdi.';
+        }
+
+        async function logout() {
+            localStorage.removeItem('access');
+            localStorage.removeItem('refresh');
+            localStorage.removeItem('username');
+            accessToken = null;
+            document.getElementById('appScreen').classList.add('hidden');
+            document.getElementById('authScreen').classList.remove('hidden');
+        }
+
+        // ---------- Data loading ----------
+        async function enterApp() {
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('appScreen').classList.remove('hidden');
+
+            try {
+                let me = null;
+                try {
+                    me = await api('/users/me/');
+                } catch (_) {
+                    const users = paginated(await api('/users/?search=' + encodeURIComponent(localStorage.getItem('username') || '')));
+                    me = users[0];
+                }
+                currentUser = me;
+                document.getElementById('adminPanel').classList.toggle('hidden', !(me && me.is_staff));
+                document.getElementById('cloneBtn')?.classList.toggle('hidden', !(me && me.is_staff));
+                if (me && me.is_staff) {
+                    loadPendingTickets();
+                }
+                if (me) {
+                    const initials = ((me.first_name || '')[0] || '') + ((me.last_name || '')[0] || me.username[0] || '');
+                    document.getElementById('avatar').innerText = initials.toUpperCase();
+                    document.getElementById('userFullName').innerText = [me.first_name, me.last_name].filter(Boolean).join(' ') || me.username;
+                    document.getElementById('userName').innerText = '@' + me.username;
+                }
+
+                const sessions = paginated(await api('/sessions/'));
+                currentSession = sessions.find(s => s.is_announcement && s.is_active) || sessions.find(s => s.is_active) || sessions[0] || null;
+
+                if (!currentSession) {
+                    document.getElementById('sessionTitle').innerText = 'Nahar Kataloqu';
+                    document.getElementById('sessionStatus').innerText = 'Aktiv sessiya yoxdur';
+                    document.getElementById('sessionDot').className = 'w-2 h-2 rounded-full bg-slate-500';
+                    document.getElementById('timer-h').innerText = '00';
+                    document.getElementById('timer-m').innerText = '00';
+                    document.getElementById('timer-s').innerText = '00';
+                    await renderCatalog();
+                    return;
+                }
+
+                document.getElementById('sessionTitle').innerText = currentSession.title;
+                updateSessionStatus();
+                startTimer(currentSession.end_time);
+
+                await loadProposals();
+                loadParticipants();
+                updateBudget();
+                loadNotifications();
+                maybeShowInviteButton();
+
+                if (!currentSession.is_active) {
+                    try {
+                        const result = await api(`/sessions/${currentSession.id}/result/`);
+                        showToast('Seçim tamamlandı!', result.restaurant);
+                    } catch (_) {}
+                }
+            } catch (e) {
+                if (e.status === 401) logout();
+                else showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        function updateSessionStatus() {
+            const dot = document.getElementById('sessionDot');
+            const label = document.getElementById('sessionStatus');
+            if (currentSession.is_active) { dot.className = 'w-2 h-2 rounded-full bg-emerald-400'; label.innerText = 'Səsvermə Aktiv'; }
+            else { dot.className = 'w-2 h-2 rounded-full bg-slate-500'; label.innerText = 'Sessiya Bağlandı'; }
+        }
+
+        async function loadProposals() {
+            const proposals = paginated(await api(`/sessions/${currentSession.id}/proposals/`));
+            myVotes = {};
+            try {
+                const votes = paginated(await api(`/sessions/${currentSession.id}/votes/`));
+                votes.forEach(v => { myVotes[v.proposal] = v.choice; });
+            } catch (_) {}
+
+            const container = document.getElementById('proposalList');
+            container.innerHTML = '';
+            if (!proposals.length) {
+                container.innerHTML = '<div class="glass-card rounded-3xl p-8 text-center text-xs font-semibold text-slate-400">Hələ təklif yoxdur.</div>';
+                return;
+            }
+            proposals.forEach(p => container.appendChild(renderProposalCard(p)));
+            applyFilter();
+        }
+
+        const cuisineLabels = { european: 'European', turkish: 'Türk', asian: 'Asiya', national: 'Milli' };
+
+        function renderProposalCard(p) {
+            const card = document.createElement('div');
+            card.className = 'proposal-card glass-card rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300';
+            card.dataset.cuisine = p.cuisine_type;
+            card.dataset.proposalId = p.id;
+            const hasVeg = (p.menu_items_detail || []).some(mi => mi.is_vegetarian);
+            card.dataset.veg = hasVeg ? '1' : '0';
+
+            const menuChips = (p.menu_items_detail || []).map(mi =>
+                `<span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">${escapeHtml(mi.name)}${mi.is_vegetarian ? ' <i class="fa-solid fa-leaf text-emerald-500 text-[9px]"></i>' : ''}</span>`
+            ).join('');
+
+            const voted = myVotes[p.id] !== undefined;
+            const myRating = voted ? myVotes[p.id] : null;
+            const initials = (p.proposer_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            const proposerInitials = initials || '?';
+
+            card.innerHTML = `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div class="flex items-start gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xl shrink-0">${cuisineEmoji(p.cuisine_type)}</div>
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900">${escapeHtml(p.restaurant_name)}</h3>
+                            <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                <span><i class="fa-solid fa-utensils text-slate-400 mr-1"></i>${cuisineLabels[p.cuisine_type] || p.cuisine_type}</span>
+                                <span>&bull;</span>
+                                <span><i class="fa-solid fa-wallet text-slate-400 mr-1"></i>Orta Qiymət: <b>${Number(p.average_price).toFixed(2)} AZN</b></span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" data-name="${escapeHtml(p.restaurant_name)}" data-address="${escapeHtml(p.restaurant_address || '')}" data-price="${Number(p.average_price).toFixed(2)} AZN" onclick="openModal(this.dataset.name, this.dataset.address, this.dataset.price)" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition text-xs font-bold">
+                            <i class="fa-solid fa-location-dot"></i>
+                        </button>
+                        <div class="flex items-center gap-2 ${voted ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200'} px-4 py-2 rounded-2xl border shrink-0">
+                            <span class="vote-count ${voted ? 'text-white' : 'text-slate-800'} font-extrabold text-base">${p.vote_count}</span>
+                            <span class="${voted ? 'text-slate-400' : 'text-slate-500'} text-xs font-medium">Səs</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="py-4">
+                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Təklif Edilən Menyular:</p>
+                    <div class="flex flex-wrap gap-2">${menuChips}</div>
+                </div>
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-full bg-slate-900 text-amber-400 flex items-center justify-center text-[10px] font-bold">${proposerInitials}</div>
+                        <span class="text-xs text-slate-500">Təklif etdi: <b class="text-slate-700">${escapeHtml(p.proposer_name || '?')}</b></span>
+                    </div>
+                    <button type="button" data-proposal-id="${p.id}" onclick="toggleVote(this, ${p.id})"
+                        class="vote-btn ${voted ? 'bg-amber-500/10 text-amber-600 border border-amber-400/40' : 'bg-slate-100 hover:bg-slate-900 hover:text-amber-400'} interactive-btn text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+                        <i class="${voted ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i> ${voted ? `Səs Verilib &#9733;${myRating}` : 'Səs Ver'}
+                    </button>
+                </div>`;
+            return card;
+        }
+
+        // ---------- Catalog (visible to everyone) ----------
+        async function renderCatalog() {
+            try {
+                restaurantsCache = paginated(await api('/restaurants/'));
+                const container = document.getElementById('proposalList');
+                if (!restaurantsCache.length) {
+                    container.innerHTML = '<div class="glass-card rounded-3xl p-8 text-center text-xs font-semibold text-slate-400">Kataloqda restoran yoxdur.</div>';
+                    return;
+                }
+                container.innerHTML = '';
+                restaurantsCache.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'proposal-card glass-card rounded-3xl p-6 shadow-sm hover:shadow-md transition-all duration-300';
+                    card.dataset.cuisine = r.cuisine_type;
+                    card.dataset.catalogId = r.id;
+                    const hasVeg = (r.menu_items || []).some(mi => mi.is_vegetarian);
+                    const chips = (r.menu_items || []).map(mi =>
+                        `<span class="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200">${escapeHtml(mi.name)}${mi.is_vegetarian ? ' <i class="fa-solid fa-leaf text-emerald-500 text-[9px]"></i>' : ''}</span>`
+                    ).join('');
+                    card.dataset.veg = hasVeg ? '1' : '0';
+                    card.innerHTML = `
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                            <div class="flex items-start gap-4">
+                                <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xl shrink-0">${cuisineEmoji(r.cuisine_type)}</div>
+                                <div>
+                                    <h3 class="text-lg font-bold text-slate-900">${escapeHtml(r.name)}</h3>
+                                    <p class="text-xs text-slate-500 mt-1 flex items-center gap-3">
+                                        <span><i class="fa-solid fa-utensils text-slate-400 mr-1"></i>${cuisineLabels[r.cuisine_type] || r.cuisine_type}</span>
+                                        <span>&bull;</span>
+                                        <span><i class="fa-solid fa-wallet text-slate-400 mr-1"></i>Orta Qiymət: <b>${Number(r.average_price).toFixed(2)} AZN</b></span>
+                                    </p>
+                                </div>
+                            </div>
+                            <button type="button" data-name="${escapeHtml(r.name)}" data-address="${escapeHtml(r.address || '')}" data-price="${Number(r.average_price).toFixed(2)} AZN" onclick="openModal(this.dataset.name, this.dataset.address, this.dataset.price)" class="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition text-xs font-bold">
+                                <i class="fa-solid fa-location-dot"></i>
+                            </button>
+                        </div>
+                        <div class="py-4">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Menyu:</p>
+                            <div class="flex flex-wrap gap-2">${chips}</div>
+                        </div>`;
+                    container.appendChild(card);
+                });
+                applyFilter();
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        function cuisineEmoji(c) {
+            return { european: '\u{1F355}', turkish: '\u{1F959}', asian: '\u{1F35C}', national: '\u{1F372}' }[c] || '\u{1F37D}';
+        }
+
+        function escapeHtml(s) {
+            const div = document.createElement('div');
+            div.textContent = s == null ? '' : String(s);
+            return div.innerHTML;
+        }
+
+        let vegOnly = false;
+        function toggleVegFilter(btn){
+            vegOnly = !vegOnly;
+            btn.className = vegOnly ? 'text-xs font-bold px-4 py-2 rounded-xl bg-emerald-600 text-white interactive-btn shrink-0' : 'text-xs font-bold px-4 py-2 rounded-xl bg-white text-emerald-700 border border-emerald-200 interactive-btn shrink-0';
+            applyFilter();
+        }
+
+        async function castVote(starBtn, proposalId, rating) {
+            const btn = starBtn.closest ? starBtn.closest('.vote-btn') : starBtn;
+            const card = btn.closest('.proposal-card');
+            const restaurantName = card.querySelector('h3').innerText;
+            const countEl = card.querySelector('.vote-count');
+            try {
+                await api(`/sessions/${currentSession.id}/votes/`, 'POST', { proposal: proposalId, choice: rating });
+                myVotes[proposalId] = rating;
+                countEl.innerText = parseInt(countEl.innerText) + 1;
+                setVoteBtnState(btn, true, rating);
+                showToast('Uğurlu səs!', `${restaurantName} — ${rating} ulduz.`);
+                loadParticipants();
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        async function toggleVote(btn, proposalId) {
+            const card = btn.closest('.proposal-card');
+            const restaurantName = card.querySelector('h3').innerText;
+            const countEl = card.querySelector('.vote-count');
+            try {
+                if (myVotes[proposalId] !== undefined) {
+                    await api(`/sessions/${currentSession.id}/votes/`, 'DELETE', { proposal: proposalId });
+                    delete myVotes[proposalId];
+                    countEl.innerText = Math.max(parseInt(countEl.innerText) - 1, 0);
+                    setVoteBtnState(btn, false);
+                    showToast('Səs ləğv edildi', `${restaurantName} üçün səsini geri aldın.`);
+                    loadParticipants();
+                } else {
+                    await castVote(btn, proposalId, 5);
+                }
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+        function openStars(btn, proposalId){
+            toggleVote(btn, proposalId);
+        }
+
+        function setVoteBtnState(btn, voted, rating) {
+            const countEl = btn.closest('.proposal-card').querySelector('.vote-count');
+            if (voted) {
+                btn.className = 'vote-btn bg-amber-500/10 text-amber-600 border border-amber-400/40 interactive-btn text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2';
+                btn.innerHTML = `<i class="fa-solid fa-heart"></i> Səs Verilib ${rating ? '&#9733;' + rating : ''}`;
+                countEl.className = 'vote-count text-white font-extrabold text-base';
+                countEl.parentElement.className = 'flex items-center gap-2 bg-slate-900 border-slate-800 px-4 py-2 rounded-2xl border shrink-0';
+            } else {
+                btn.className = 'vote-btn bg-slate-100 hover:bg-slate-900 hover:text-amber-400 interactive-btn text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2';
+                btn.innerHTML = '<i class="fa-regular fa-heart"></i> Səs Ver';
+                countEl.className = 'vote-count text-slate-800 font-extrabold text-base';
+                countEl.parentElement.className = 'flex items-center gap-2 bg-slate-100 border-slate-200 px-4 py-2 rounded-2xl border shrink-0';
+            }
+        }
+
+        // ---------- Suggestion ticket ----------
+        async function addProposal() {
+            if (!currentSession) { showToast('Xəta', 'Aktiv sessiya yoxdur.'); return; }
+            if (!currentSession.is_active) { showToast('Xəta', 'Sessiya artıq bağlanıb.'); return; }
+
+            try {
+                restaurantsCache = paginated(await api('/restaurants/'));
+                const select = document.getElementById('sgRestaurant');
+                select.innerHTML = restaurantsCache.map(r =>
+                    `<option value="${r.id}">${escapeHtml(r.name)} (${cuisineLabels[r.cuisine_type] || r.cuisine_type})</option>`
+                ).join('');
+                onSuggestRestaurantChange();
+                const m = document.getElementById('suggestModal');
+                m.classList.remove('hidden');
+                m.classList.add('flex');
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        function onSuggestRestaurantChange() {
+            const rid = parseInt(document.getElementById('sgRestaurant').value);
+            const r = restaurantsCache.find(x => x.id === rid);
+            const wrap = document.getElementById('sgMenuItems');
+            wrap.innerHTML = (r && r.menu_items ? r.menu_items : []).map(mi => `
+                <label class="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                    <input type="checkbox" class="sg-menu-item rounded border-slate-300" value="${mi.id}"> ${escapeHtml(mi.name)}
+                </label>`).join('') || '<p class="text-[11px] text-slate-400">Bu restoran üçün menyu yoxdur.</p>';
+        }
+
+        async function submitSuggestion() {
+            const btn = document.getElementById('sgSubmitBtn');
+            btn.disabled = true;
+            try {
+                const restaurantId = parseInt(document.getElementById('sgRestaurant').value);
+                const menuItems = [...document.querySelectorAll('.sg-menu-item:checked')].map(cb => parseInt(cb.value));
+                await api(`/sessions/${currentSession.id}/suggestions/`, 'POST', {
+                    restaurant: restaurantId,
+                    menu_items: menuItems,
+                    note: document.getElementById('sgNote').value.trim(),
+                });
+                closeSuggestModal();
+                document.getElementById('sgNote').value = '';
+                showToast('Təklif göndərildi!', 'Admin təsdiqindən sonra səsverməyə çıxacaq.');
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+            btn.disabled = false;
+        }
+
+        function closeSuggestModal() {
+            const m = document.getElementById('suggestModal');
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+
+        // ---------- Admin panel ----------
+        async function loadPendingTickets() {
+            if (!currentSession) return;
+            try {
+                const tickets = paginated(await api(`/sessions/${currentSession.id}/suggestions/`));
+                const pending = tickets.filter(t => t.status === 'pending');
+                const box = document.getElementById('pendingTickets');
+                const badge = document.getElementById('pendingBadge');
+
+                if (badge) {
+                    badge.classList.toggle('hidden', pending.length === 0);
+                    if (pending.length) badge.innerText = pending.length;
+                }
+
+                if (!pending.length) {
+                    box.innerHTML = '<p class="text-[11px] text-slate-400 font-semibold">Gözləyən təklif yoxdur.</p>';
+                    return;
+                }
+                box.innerHTML = tickets.slice(0, 5).map(t => `
+                    <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-800 truncate">${escapeHtml(t.restaurant_name)}</p>
+                            <p class="text-[10px] text-slate-400 truncate">@${escapeHtml(t.username)} &bull; Gözləyir</p>
+                        </div>
+                        <div class="flex gap-1 shrink-0">
+                            <button onclick="approveTicket(${t.id})" class="text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">✓</button>
+                            <button onclick="rejectTicket(${t.id})" class="text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-rose-50">✕</button>
+                        </div>
+                    </div>`).join('');
+            } catch (_) {}
+        }
+
+        async function approveTicket(id){ try{ await api(`/suggestions/${id}/approve/`, 'POST', {}); showToast('Təsdiqləndi','Təklif səsverməyə əlavə olundu'); loadPendingTickets(); loadProposals(); }catch(e){ showToast('Xəta', formatApiError(e)); } }
+        async function rejectTicket(id){ try{ await api(`/suggestions/${id}/reject/`, 'POST', {}); showToast('Rədd edildi','Təklif silindi'); loadPendingTickets(); }catch(e){ showToast('Xəta', formatApiError(e)); } }
+        async function cloneSession(){ if(!currentSession) return; try{ await api(`/sessions/${currentSession.id}/clone/`, 'POST', {}); showToast('Kopyalandı','Sessiya klonlandı'); enterApp(); }catch(e){ showToast('Xəta', formatApiError(e)); } }
+
+        async function createSession() {
+            try {
+                const title = document.getElementById('nsTitle').value.trim();
+                const start = document.getElementById('nsStart').value;
+                const end = document.getElementById('nsEnd').value;
+                if (!title || !start || !end) { showToast('Xəta', 'Bütün sahələri doldurun.'); return; }
+                const teams = paginated(await api('/teams/'));
+                if (!teams.length) { showToast('Xəta', 'Komanda tapılmadı.'); return; }
+                const payload = {
+                    team_id: teams[0].id,
+                    title,
+                    start_time: new Date(start).toISOString(),
+                    end_time: new Date(end).toISOString(),
+                    selection_algorithm: document.getElementById('nsAlgorithm').value,
+                    is_announcement: document.getElementById('nsAnnouncement')?.checked || false,
+                };
+                await api('/sessions/', 'POST', payload);
+                showToast('Sessiya yaradıldı!', `"${title}" uğurla əlavə olundu.`);
+                enterApp();
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        function toggleAddMode(mode) {
+            addMode = mode;
+            const isFood = mode === 'food';
+            document.getElementById('modeRestaurantBtn').className =
+                'text-[11px] font-bold px-3 py-1.5 rounded-lg ' + (!isFood ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200');
+            document.getElementById('modeFoodBtn').className =
+                'text-[11px] font-bold px-3 py-1.5 rounded-lg ' + (isFood ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200');
+            document.getElementById('frCuisineWrap').classList.toggle('hidden', isFood);
+            document.getElementById('frParentWrap').classList.toggle('hidden', !isFood);
+            document.getElementById('frAddress').placeholder = isFood ? 'Təsvir (isteğe bağlı)' : 'Ünvan';
+            if (isFood) {
+                const sel = document.getElementById('frParent');
+                sel.innerHTML = restaurantsCache.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+            }
+        }
+
+        async function submitFood() {
+            try {
+                const name = document.getElementById('frName').value.trim();
+                const price = parseFloat(document.getElementById('frPrice').value || '0');
+                if (!name || price <= 0) { showToast('Xəta', 'Ad və qiymət daxil edin.'); return; }
+
+                if (addMode === 'restaurant') {
+                    await api('/restaurants/', 'POST', {
+                        name,
+                        cuisine_type: document.getElementById('frCuisine').value,
+                        average_price: price,
+                        address: document.getElementById('frAddress').value.trim(),
+                    });
+                    showToast('Restoran əlavə olundu!', name + ' kataloqa daxil edildi.');
+                } else {
+                    const parentId = parseInt(document.getElementById('frParent').value);
+                    await api(`/restaurants/${parentId}/menu-items/`, 'POST', {
+                        name,
+                        price,
+                        is_vegetarian: document.getElementById('frVeg').checked,
+                        description: document.getElementById('frAddress').value.trim(),
+                    });
+                    showToast('Yemək əlavə olundu!', `${name} — bütün istifadəçilər üçün görünür.`);
+                }
+                document.getElementById('frName').value = '';
+                document.getElementById('frPrice').value = '';
+                restaurantsCache = [];
+            } catch (e) {
+                showToast('Xəta', formatApiError(e));
+            }
+        }
+
+        // ---------- Notifications ----------
+        async function loadNotifications() {
+            try {
+                const unread = await api('/notifications/unread/');
+                const badge = document.getElementById('notifBadge');
+                badge.classList.toggle('hidden', unread.unread === 0);
+                if (unread.unread) badge.innerText = unread.unread;
+
+                const items = paginated(await api('/notifications/'));
+                const list = document.getElementById('notifList');
+                if (!items.length) {
+                    list.innerHTML = '<p class="text-[11px] text-slate-400 font-semibold text-center py-3">Bildiri\u015f yoxdur.</p>';
+                    return;
+                }
+                list.innerHTML = items.map(n => `
+                    <div class="flex items-start justify-between gap-2 p-2.5 rounded-xl ${n.is_read ? 'bg-slate-50' : 'bg-amber-50 border border-amber-200'}">
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-semibold ${n.is_read ? 'text-slate-500' : 'text-slate-800'}">${escapeHtml(n.message)}</p>
+                            <p class="text-[9px] text-slate-400">${fmtDate(n.created_at)}</p>
+                        </div>
+                        ${!n.is_read ? `<button type="button" onclick="markRead(${n.id})" class="shrink-0 text-[9px] font-extrabold text-amber-700 hover:underline">Oxundu</button>` : ''}
+                    </div>`).join('');
+            } catch (_) {}
+        }
+
+        function fmtDate(iso) {
+            return new Date(iso).toLocaleString('az-AZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function toggleNotifications(event) {
+            event.stopPropagation();
+            document.getElementById('notifPanel').classList.toggle('hidden');
+            if (!document.getElementById('notifPanel').classList.contains('hidden')) loadNotifications();
+        }
+
+        async function markRead(id) {
+            await api(`/notifications/${id}/read/`, 'POST', {});
+            loadNotifications();
+        }
+
+        async function markAllRead() {
+            await api('/notifications/read_all/', 'POST', {});
+            loadNotifications();
+        }
+
+        document.addEventListener('click', (e) => {
+            const panel = document.getElementById('notifPanel');
+            if (panel && !panel.classList.contains('hidden') && !panel.contains(e.target)) {
+                panel.classList.add('hidden');
+            }
+        });
+
+        // ---------- Invite links ----------
+        async function generateInvite() {
+            if (!currentSession) return;
+            try {
+                const res = await api(`/teams/${currentSession.team.id}/invite_link/`, 'POST', { days: 7 });
+                const url = location.origin + res.url;
+                try { navigator.clipboard.writeText(url); } catch (_) {}
+                showToast('D\u0259v\u0259t linki haz\u0131r!', 'Link bufer\u0259 kopyaland\u0131: ' + url);
+            } catch (e) {
+                showToast('X\u0259ta', formatApiError(e));
+            }
+        }
+
+        async function maybeShowInviteButton() {
+            try {
+                const team = await api(`/teams/${currentSession.team.id}/`);
+                const isOwner = (team.my_role === 'owner') || (currentUser && currentUser.is_staff);
+                document.getElementById('inviteBtn').classList.toggle('hidden', !isOwner);
+            } catch (_) {}
+        }
+
+        async function loadParticipants() {
+            try {
+                const members = paginated(await api(`/teams/${currentSession.team.id}/members/`));
+                const votes = paginated(await api(`/sessions/${currentSession.id}/votes/`));
+                const voters = new Set(votes.map(v => v.voter));
+
+                const list = document.getElementById('participantList');
+                list.innerHTML = '';
+                members.forEach(m => {
+                    const voted = voters.has(m.user);
+                    const initials = (m.username || '?').slice(0, 2).toUpperCase();
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition' + (voted ? '' : ' opacity-75');
+                    row.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full ${voted ? 'bg-slate-900 text-amber-400' : 'bg-slate-200 text-slate-600'} font-bold text-xs flex items-center justify-center">${initials}</div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-800">${escapeHtml(m.username)}</p>
+                                <p class="text-[10px] text-slate-400">${m.role === 'owner' ? 'Team Lead' : 'Member'}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${voted
+                            ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                            : 'text-amber-700 bg-amber-50 border border-amber-200'}">
+                            <i class="fa-solid ${voted ? 'fa-check' : 'fa-regular fa-clock'}"></i> ${voted ? 'Səs Verdi' : 'Gözləyir'}
+                        </span>`;
+                    list.appendChild(row);
+                });
+                document.getElementById('voteProgress').innerText = `${voters.size}/${members.length} Səs Verib`;
+            } catch (_) {}
+        }
+
+        async function updateBudget() {
+            try {
+                const proposals = paginated(await api(`/sessions/${currentSession.id}/proposals/`));
+                if (!proposals.length) return;
+                const avg = proposals.reduce((sum, p) => sum + Number(p.average_price), 0) / proposals.length;
+                const leader = [...proposals].sort((a, b) => b.vote_count - a.vote_count)[0];
+                document.getElementById('avgCost').innerText = avg.toFixed(2) + ' AZN';
+                document.getElementById('leaderCost').innerText = Number(leader.average_price).toFixed(2) + ' AZN';
+            } catch (_) {}
+        }
+
+        // ---------- Timer ----------
+        let timerInterval = null;
+        function startTimer(endTime) {
+            clearInterval(timerInterval);
+            const end = new Date(endTime).getTime();
+            const tick = () => {
+                let diff = Math.max(Math.floor((end - Date.now()) / 1000), 0);
+                document.getElementById('timer-h').innerText = String(Math.floor(diff / 3600)).padStart(2, '0');
+                document.getElementById('timer-m').innerText = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+                document.getElementById('timer-s').innerText = String(diff % 60).padStart(2, '0');
+                if (diff <= 0) { clearInterval(timerInterval); updateSessionStatus(); }
+            };
+            tick();
+            timerInterval = setInterval(tick, 1000);
+        }
+
+        // ---------- Search & filter ----------
+        function setFilter(f, btn) {
+            activeFilter = f;
+            document.querySelectorAll('.filter-btn').forEach(b => {
+                b.className = 'filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-white text-slate-600 hover:text-slate-900 border border-slate-200 interactive-btn shrink-0';
+            });
+            btn.className = 'filter-btn text-xs font-bold px-4 py-2 rounded-xl bg-slate-900 text-white shadow-sm border border-slate-800 interactive-btn shrink-0';
+            applyFilter();
+        }
+
+        function applyFilter() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            document.querySelectorAll('.proposal-card').forEach(card => {
+                const matchesText = card.innerText.toLowerCase().includes(q);
+                const matchesCuisine = activeFilter === 'all' || card.dataset.cuisine === activeFilter;
+                const matchesVeg = !vegOnly || card.dataset.veg === '1';
+                card.style.display = matchesText && matchesCuisine && matchesVeg ? 'block' : 'none';
+            });
+        }
+        function filterCards() { applyFilter(); }
+
+        // ---------- Modal ----------
+        function openModal(name, address, price) {
+            document.getElementById('modalTitle').innerText = name;
+            document.getElementById('modalAddress').innerText = address || 'Ünvan qeyd olunmayıb';
+            document.getElementById('modalDist').innerText = price;
+            const m = document.getElementById('mapModal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+        function closeModal() {
+            const m = document.getElementById('mapModal');
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+        window.onclick = function (event) {
+            const modal = document.getElementById('mapModal');
+            if (event.target === modal) closeModal();
+        };
+
+        // ---------- Boot ----------
+        window.addEventListener('DOMContentLoaded', () => {
+            switchTab('login');
+            if (accessToken) {
+                enterApp();
+            } else {
+                document.getElementById('authScreen').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

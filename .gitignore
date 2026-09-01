@@ -1,0 +1,61 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# --- Virtual environments ---
+venv/
+env/
+ENV/
+.venv/
+
+# --- Django ---
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Env vars / secrets
+.env
+.env.*
+!.env.example
+
+# Audit / app logs (folder is tracked via logs/.gitkeep, contents are not)
+logs/*
+!logs/.gitkeep
+
+# --- Testing / coverage ---
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+nosetests.xml
+
+# --- Distribution / packaging ---
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+*.pid
+
+# --- Node (in case any frontend tooling gets added later) ---
+node_modules/
