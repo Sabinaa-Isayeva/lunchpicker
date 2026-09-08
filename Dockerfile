@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn psycopg2-binary
 
 COPY . .
 
-RUN python manage.py collectstatic --noinput
+RUN mkdir -p /app/logs /app/staticfiles && touch /app/logs/audit.log && python manage.py collectstatic --noinput
 
 EXPOSE 8000
 

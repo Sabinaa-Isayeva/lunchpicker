@@ -121,13 +121,28 @@ RATELIMIT_ENABLE = True
 # HTTPS / security - enforced in production via env
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # Redirect to HTTPS only when explicitly enabled. The default
+    # docker-compose stack serves plain HTTP behind nginx, so leaving
+    # this always-on causes an infinite http->https redirect loop.
+    # Set DJANGO_SECURE_SSL_REDIRECT=1 to enable in a real TLS deployment.
+    import os as _os
+    if _os.environ.get('DJANGO_SECURE_SSL_REDIRECT', '0') == '1':
+        SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = _os.environ.get('DJANGO_SESSION_COOKIE_SECURE', '0') == '1'
+    CSRF_COOKIE_SECURE = _os.environ.get('DJANGO_CSRF_COOKIE_SECURE', '0') == '1'
+    if _os.environ.get('DJANGO_ENABLE_HSTS', '0') == '1':
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# Allow overriding hosts in Docker (Host header is e.g. localhost via nginx).
+_allowed_hosts_env = __import__('os').environ.get('DJANGO_ALLOWED_HOSTS')
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+elif not DEBUG:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'web', 'nginx', 'testserver']
 
 # Audit logging
+Path(BASE_DIR / 'logs').mkdir(parents=True, exist_ok=True)
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -140,6 +155,7 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': BASE_DIR / 'logs' / 'audit.log',
             'formatter': 'audit',
+            'delay': True,
         },
         'audit_console': {
             'level': 'INFO',
