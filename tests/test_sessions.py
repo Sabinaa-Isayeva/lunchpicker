@@ -68,7 +68,7 @@ def test_vote_rate_limit(api, owner, member, team, session):
     auth(api, member)
     codes = [_vote(api, session, p).status_code for p in proposals]
     assert codes[:5] == [201] * 5
-    assert codes[5] == 400
+    assert codes[5] == 429
 
 
 def test_outsider_cannot_vote(api, outsider, owner, team, restaurant, session):

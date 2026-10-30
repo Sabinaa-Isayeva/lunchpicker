@@ -74,7 +74,7 @@ def test_notifications_flow(api, owner, member, team, restaurant):
     assert unread.data["unread"] == 1
 
     raw = api.get("/api/notifications/").data
-    first = (raw["results"] if isinstance(raw, dict) else raw)[0]
+    first = next(item for item in (raw["results"] if isinstance(raw, dict) else raw) if not item["is_read"])
     assert api.post(f"/api/notifications/{first['id']}/read/").status_code == 200
     assert api.get("/api/notifications/unread/").data["unread"] == 0
 

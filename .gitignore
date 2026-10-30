@@ -10,6 +10,7 @@ venv/
 env/
 ENV/
 .venv/
+.venv311/
 
 # --- Django ---
 *.log
@@ -59,3 +60,4 @@ Thumbs.db
 
 # --- Node (in case any frontend tooling gets added later) ---
 node_modules/
+.verify/

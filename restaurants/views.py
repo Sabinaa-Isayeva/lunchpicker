@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from django.shortcuts import get_object_or_404
 
 from core.permissions import IsAdminUserOrReadOnly
 from restaurants.models import MenuItem, Restaurant
@@ -22,5 +23,5 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         return MenuItem.objects.filter(restaurant_id=self.kwargs["restaurant_pk"])
 
     def perform_create(self, serializer):
-        restaurant = Restaurant.objects.get(pk=self.kwargs["restaurant_pk"])
+        restaurant = get_object_or_404(Restaurant, pk=self.kwargs["restaurant_pk"])
         serializer.save(restaurant=restaurant)

@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.validators import URLValidator
+from django.core.validators import URLValidator, MinValueValidator, MaxValueValidator
 from django.db import models
 
 
@@ -14,8 +14,8 @@ class Restaurant(models.Model):
     address = models.CharField(max_length=255, blank=True)
     cuisine_type = models.CharField(max_length=20, choices=CuisineType.choices)
     website_url = models.URLField(validators=[URLValidator()], blank=True)
-    average_price = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    rating = models.DecimalField(max_digits=3, decimal_places=1, default=0)
+    average_price = models.DecimalField(max_digits=6, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    rating = models.DecimalField(max_digits=3, decimal_places=1, default=0, validators=[MinValueValidator(0), MaxValueValidator(5)])
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -38,7 +38,7 @@ class MenuItem(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="menu_items")
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True)
-    price = models.DecimalField(max_digits=6, decimal_places=2)
+    price = models.DecimalField(max_digits=6, decimal_places=2, validators=[MinValueValidator(0)])
     is_vegetarian = models.BooleanField(default=False)
     is_vegan = models.BooleanField(default=False)
     is_gluten_free = models.BooleanField(default=False)

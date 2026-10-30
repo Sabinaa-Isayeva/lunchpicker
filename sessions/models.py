@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db import transaction
 
 
 class LunchSession(models.Model):
@@ -53,20 +54,25 @@ class LunchSession(models.Model):
         now = timezone.now()
         return self.start_time <= now <= self.end_time
 
+    @transaction.atomic
     def create_next_occurrence(self):
-        if not self.is_recurring or not self.recurrence_rule:
+        if not self.is_recurring or self.recurrence_rule not in self.RecurrenceRule.values:
             return None
+        LunchSession.objects.select_for_update().get(pk=self.pk)
         if self.next_occurrences.exists():
             return None
         from django.utils import timezone as tz
 
         step = (tz.timedelta(days=1) if self.recurrence_rule == LunchSession.RecurrenceRule.DAILY
                 else tz.timedelta(weeks=1))
+        offset = step
+        if self.end_time + offset <= tz.now():
+            offset = step * (int((tz.now() - self.end_time) / step) + 1)
         return LunchSession.objects.create(
             team=self.team,
             title=self.title,
-            start_time=self.start_time + step,
-            end_time=self.end_time + step,
+            start_time=self.start_time + offset,
+            end_time=self.end_time + offset,
             is_recurring=True,
             recurrence_rule=self.recurrence_rule,
             selection_algorithm=self.selection_algorithm,
@@ -97,7 +103,7 @@ class SessionProposal(models.Model):
     def clean(self):
         if self.proposer_id and not self.session.team.members.filter(pk=self.proposer_id).exists():
             raise ValidationError({"proposer": "Proposer must be a member of the session's team."})
-        for item in self.menu_items.all():
+        for item in self.menu_items.all() if self.pk else []:
             if item.restaurant_id != self.restaurant_id:
                 raise ValidationError({"menu_items": "All menu items must belong to the proposed restaurant."})
 
@@ -164,7 +170,7 @@ class Suggestion(models.Model):
         ordering = ["-created_at"]
 
     def clean(self):
-        for item in self.menu_items.all():
+        for item in self.menu_items.all() if self.pk else []:
             if item.restaurant_id != self.restaurant_id:
                 raise ValidationError({"menu_items": "All menu items must belong to the selected restaurant."})
 

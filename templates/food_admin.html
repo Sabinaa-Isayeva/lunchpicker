@@ -93,7 +93,10 @@
                                 <input id="nrAddress" type="text" placeholder="Ünvan"
                                        class="px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-amber-400">
                             </div>
-                            <button onclick="createRestaurant()" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl">Restoran Yarat</button>
+                            <input id="nrWebsite" type="url" placeholder="Vebsayt URL" aria-label="Vebsayt URL" class="w-full p-3 border rounded-xl text-xs">
+                            <input id="nrRating" type="number" min="0" max="5" step="0.1" placeholder="Reytinq (0–5)" aria-label="Reytinq" class="w-full p-3 border rounded-xl text-xs">
+                            <button id="saveRestaurant" onclick="createRestaurant()" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl">Restoran Yarat</button>
+                            <button onclick="resetRestaurantForm()" class="text-xs font-bold">Yeni restoran</button>
                         </div>
                     </details>
                 </div>
@@ -131,7 +134,10 @@
                                         <input id="miVeg" type="checkbox" class="rounded border-slate-300"> Vegetarian
                                     </label>
                                 </div>
-                                <button onclick="createMenuItem()" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl">Menyuya Əlavə Et</button>
+                                <label class="text-xs font-bold"><input id="miVegan" type="checkbox"> Vegan</label>
+                                <label class="text-xs font-bold"><input id="miGlutenFree" type="checkbox"> Qlütensiz</label>
+                                <button id="saveMenuItem" onclick="createMenuItem()" class="w-full amber-btn interactive-btn text-slate-950 font-bold text-xs py-3 rounded-xl">Menyuya Əlavə Et</button>
+                                <button onclick="resetMenuForm()" class="text-xs font-bold">Yeni yemək</button>
                             </div>
                         </details>
                     </div>
@@ -140,6 +146,7 @@
         </main>
     </div>
 
-    <script src="/static/food_admin.js"></script>
+    <script src="/static/api.js"></script>
+<script src="/static/food_admin.js"></script>
 </body>
 </html>

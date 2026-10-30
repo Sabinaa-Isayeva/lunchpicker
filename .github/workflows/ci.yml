@@ -29,4 +29,21 @@ jobs:
       - name: Run tests with coverage
         run: |
           coverage run -m pytest tests/
-          coverage report --fail-under=70
+          coverage report --fail-under=80
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check browser API client
+        run: node --test tests/frontend/api.test.cjs
+
+      - name: Browser workflow smoke test
+        run: |
+          pip install -r requirements-browser.txt
+          python -m playwright install --with-deps chromium
+          python manage.py migrate --noinput
+          python manage.py seed_demo
+          python manage.py runserver 127.0.0.1:8000 --noreload > /tmp/lunchpicker-server.log 2>&1 &
+          python tests/browser_smoke.py
+          python manage.py shell -c "from django.contrib.auth import get_user_model; get_user_model().objects.create_user('browser_admin', email='browser_admin@test.local', password='Browser-local-pass-438!', is_staff=True)"
+          python tests/browser_admin_smoke.py http://127.0.0.1:8000 browser_admin 'Browser-local-pass-438!'

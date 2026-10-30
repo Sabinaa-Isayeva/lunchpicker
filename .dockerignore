@@ -8,3 +8,6 @@ logs/
 htmlcov/
 staticfiles/
 .git
+.verify
+.venv311
+node_modules

@@ -53,20 +53,13 @@
         </div>
     </main>
 
+<script src="/static/api.js"></script>
 <script>
 const token = window.location.pathname.split('/').filter(Boolean).pop();
 
 function showToast(t,m){ document.getElementById('toast-title').innerText=t; document.getElementById('toast-msg').innerText=m; const el=document.getElementById('toast'); el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),3000); }
 
-async function api(path, method='GET', body=null, auth=true){
-    const headers={'Content-Type':'application/json'};
-    const at = localStorage.getItem('access');
-    if(auth && at) headers['Authorization']='Bearer '+at;
-    const res = await fetch('/api'+path,{method,headers,body: body?JSON.stringify(body):null});
-    if(!res.ok){ const j=await res.json().catch(()=>({detail:res.statusText})); throw j; }
-    if(res.status===204) return null;
-    return res.json();
-}
+async function api(path, method='GET', body=null) { try { return await window.lunchClient.request(path, method, body); } catch (error) { if (error.status === 401) { localStorage.setItem('pending_join', token); location.href = '/?join=' + token; } throw error.data || error; } }
 
 async function init(){
     try{
@@ -83,6 +76,7 @@ async function init(){
             try{
                 const full = await api('/join/'+token+'/', 'GET');
                 if(full.already_member){
+                    localStorage.setItem('active_team', full.team.id);
                     document.getElementById('inviteStatus').innerText = 'Artıq bu komandanın üzvüsünüz.';
                     document.getElementById('joinBtn').innerText = 'Tətbiqə keç';
                     document.getElementById('joinBtn').onclick = ()=> window.location.href='/';
@@ -106,7 +100,8 @@ async function joinTeam(){
     }
     btn.disabled=true; btn.innerText='Qoşulunur...';
     try{
-        await api('/join/'+token+'/', 'POST', {}, true);
+        const joined = await api('/join/'+token+'/', 'POST', {});
+        localStorage.setItem('active_team', joined.team);
         msg.className='text-xs font-bold text-emerald-600';
         msg.innerText='Uğurla qoşuldunuz! Yönləndirilirsiniz...';
         showToast('Uğurlu','Komandaya qoşuldunuz');

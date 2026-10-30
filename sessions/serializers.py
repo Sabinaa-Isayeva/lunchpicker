@@ -12,6 +12,8 @@ from sessions.models import (
     Vote,
 )
 from teams.models import Membership, Team
+from core.models import SystemSettings
+from core.permissions import is_team_owner
 
 
 class TeamMiniSerializer(serializers.ModelSerializer):
@@ -42,6 +44,24 @@ class LunchSessionSerializer(serializers.ModelSerializer):
         return obj.is_active
 
     def validate(self, attrs):
+        defaults = SystemSettings.current()
+        user = self.context["request"].user
+        team = attrs.get("team", getattr(self.instance, "team", None))
+        if team and not (user.is_staff or is_team_owner(user, team)):
+            raise serializers.ValidationError({"team_id": "Only the team owner can schedule sessions."})
+        if self.instance and team != self.instance.team:
+            raise serializers.ValidationError({"team_id": "A session cannot be moved to another team."})
+        if self.instance and hasattr(self.instance, "result"):
+            raise serializers.ValidationError("Finalized sessions cannot be edited.")
+        if self.instance and self.instance.votes.exists():
+            for field in ("voting_mode", "is_anonymous"):
+                if field in attrs and attrs[field] != getattr(self.instance, field):
+                    raise serializers.ValidationError({field: "Voting rules cannot change after the first vote."})
+        if self.instance is None:
+            attrs.setdefault("selection_algorithm", defaults.default_selection_algorithm)
+            attrs.setdefault("voting_mode", defaults.default_voting_mode)
+        if attrs.get("is_anonymous", getattr(self.instance, "is_anonymous", False)) and not defaults.allow_anonymous_voting:
+            raise serializers.ValidationError({"is_anonymous": "Anonymous voting is disabled by the administrator."})
         start = attrs.get("start_time", getattr(self.instance, "start_time", None))
         end = attrs.get("end_time", getattr(self.instance, "end_time", None))
         if start and end and end <= start:
@@ -55,10 +75,8 @@ class LunchSessionSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = self.context["request"].user
         team = validated_data["team"]
-        if not (user.is_staff or team.created_by_id == user.pk):
+        if not (user.is_staff or is_team_owner(user, team)):
             raise serializers.ValidationError("Only the team owner can schedule sessions.")
-        if not team.members.filter(pk=user.pk).exists():
-            Membership.objects.create(team=team, user=user, role=Membership.Role.OWNER)
         validated_data["created_by"] = user
         return super().create(validated_data)
 
@@ -72,6 +90,7 @@ class SessionProposalSerializer(serializers.ModelSerializer):
     )
     menu_items_detail = serializers.SerializerMethodField()
     vote_count = serializers.IntegerField(source="votes.count", read_only=True)
+    vote_score = serializers.SerializerMethodField()
     proposer_name = serializers.CharField(source="proposer.get_full_name", read_only=True)
 
     class Meta:
@@ -80,12 +99,16 @@ class SessionProposalSerializer(serializers.ModelSerializer):
             "id", "session", "restaurant", "restaurant_name", "restaurant_address",
             "cuisine_type",
             "average_price", "menu_items", "menu_items_detail", "proposer",
-            "proposer_name", "vote_count", "created_at",
+            "proposer_name", "vote_count", "vote_score", "created_at",
         ]
         read_only_fields = ["id", "proposer", "created_at"]
 
     def get_menu_items_detail(self, obj):
         return MenuItemSerializer(obj.menu_items.all(), many=True).data
+
+    def get_vote_score(self, obj):
+        from django.db.models import Sum
+        return obj.votes.aggregate(total=Sum("choice"))["total"] or 0
 
     def create(self, validated_data):
         validated_data["proposer"] = self.context["request"].user
@@ -94,8 +117,12 @@ class SessionProposalSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         session = attrs.get("session") or getattr(self.instance, "session", None)
         restaurant = attrs.get("restaurant")
+        if restaurant and any(item.restaurant_id != restaurant.pk for item in attrs.get("menu_items", [])):
+            raise serializers.ValidationError({"menu_items": "All menu items must belong to the proposed restaurant."})
         if session and not session.is_active:
             raise serializers.ValidationError("Proposals are only accepted while the session is active.")
+        if session and hasattr(session, "result"):
+            raise serializers.ValidationError("This session is finalized.")
         if restaurant and restaurant.proposals.filter(session=session, restaurant=restaurant).exclude(
                 pk=getattr(self.instance, "pk", None)).exists():
             raise serializers.ValidationError("This restaurant is already proposed in this session.")
@@ -136,18 +163,10 @@ class VoteSerializer(serializers.ModelSerializer):
             if not (request.user.is_staff or (membership and membership.role != Membership.Role.GUEST)):
                 raise serializers.ValidationError("Guests have read-only access and cannot vote.")
 
-        recent = Vote.objects.filter(voter=request.user, voted_at__gte=timezone.now() - timezone.timedelta(minutes=1))
-        if self.instance:
-            recent = recent.exclude(pk=self.instance.pk)
-        if recent.count() >= 5:
-            raise serializers.ValidationError("Rate limit exceeded: maximum 5 votes per minute.")
-
-        if session and getattr(session, "voting_mode", "rating") == "single":
-            other = Vote.objects.filter(session=session, voter=request.user).exclude(proposal=proposal)
-            if self.instance:
-                other = other.exclude(pk=self.instance.pk)
-            if other.exists():
-                raise serializers.ValidationError("Single-choice session: you already voted.")
+        if session and hasattr(session, "result"):
+            raise serializers.ValidationError("This session is finalized.")
+        if session and session.voting_mode != "rating":
+            attrs["choice"] = 1
 
         existing = Vote.objects.filter(session=session, voter=request.user, proposal=proposal)
         if self.instance:

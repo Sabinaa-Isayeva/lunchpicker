@@ -1,0 +1,9 @@
+[run]
+source = accounts,teams,restaurants,sessions,analytics,core
+omit =
+    */migrations/*
+    */tests.py
+
+[report]
+show_missing = True
+fail_under = 80

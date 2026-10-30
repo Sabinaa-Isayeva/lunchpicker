@@ -1,7 +1,7 @@
 import logging
 import random
 
-from django.db.models import Count
+from django.db.models import Count, Sum
 
 from sessions.models import LunchSession, SessionProposal
 
@@ -20,6 +20,7 @@ def select_winning_proposal(session):
     proposals = list(
         SessionProposal.objects.filter(session=session)
         .annotate(vote_count=Count("votes"))
+        .annotate(vote_score=Sum("votes__choice"))
     )
     if not proposals:
         return None, None
@@ -29,11 +30,16 @@ def select_winning_proposal(session):
     if method == LunchSession.SelectionAlgorithm.RANDOM:
         winner = random.choice(proposals)
     elif method == LunchSession.SelectionAlgorithm.WEIGHTED:
-        weights = [p.vote_count + 1 for p in proposals]
+        from core.models import SystemSettings
+        base_weight = SystemSettings.current().weighted_base_weight
+        weights = [((p.vote_score or 0) if session.voting_mode == "rating" else p.vote_count)
+                   + base_weight for p in proposals]
         winner = random.choices(proposals, weights=weights, k=1)[0]
     else:
-        top_votes = max(p.vote_count for p in proposals)
-        tied = [p for p in proposals if p.vote_count == top_votes]
+        def score(proposal):
+            return (proposal.vote_score or 0) if session.voting_mode == "rating" else proposal.vote_count
+        top_votes = max(score(p) for p in proposals)
+        tied = [p for p in proposals if score(p) == top_votes]
         winner = tied[0] if len(tied) == 1 else random.choice(tied)
 
     return winner, method

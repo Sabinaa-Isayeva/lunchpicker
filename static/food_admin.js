@@ -2,22 +2,9 @@ const API = '/api';
 let accessToken = localStorage.getItem('access');
 let restaurants = [];
 let selectedRestaurant = null;
+let editingRestaurant = null, editingMenuItem = null, menuItems = [];
 
-async function api(path, method = 'GET', body = null) {
-    const headers = { 'Content-Type': 'application/json' };
-    if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
-    const res = await fetch(API + path, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : null,
-    });
-    if (!res.ok && res.status !== 204) {
-        const err = await res.json().catch(() => ({}));
-        throw Object.assign(new Error('API error'), { status: res.status, data: err });
-    }
-    if (res.status === 204) return null;
-    return res.json();
-}
+async function api(path, method = 'GET', body = null) { return window.lunchClient.request(path, method, body); }
 
 function paginated(json) { return json.results !== undefined ? json.results : json; }
 
@@ -40,9 +27,7 @@ function formatApiError(e) {
 }
 
 function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s == null ? '' : String(s);
-    return div.innerHTML;
+    return window.LunchAPI.escapeHTML(s);
 }
 
 const cuisineLabels = { european: 'European', turkish: 'Türk', asian: 'Asiya', national: 'Milli' };
@@ -69,7 +54,7 @@ function deny(msg) {
 // ---------- Restaurants ----------
 async function loadRestaurants() {
     try {
-        restaurants = paginated(await api('/restaurants/?page_size=100'));
+        restaurants = await window.lunchClient.all('/restaurants/');
         selectedRestaurant = null;
         renderRestaurantList();
         showMenuPlaceholder();
@@ -98,11 +83,14 @@ function renderRestaurantList() {
                 <i class="fa-solid fa-trash text-[10px]"></i>
             </button>`;
         list.appendChild(row);
+        const edit = document.createElement('button'); edit.textContent = 'Düzəliş'; edit.className = 'text-xs px-2 text-amber-700';
+        edit.onclick = event => { event.stopPropagation(); editRestaurant(r); }; row.append(edit);
     });
 }
 
 async function selectRestaurant(id) {
     selectedRestaurant = id;
+    resetMenuForm();
     renderRestaurantList();
     document.getElementById('menuEmpty').classList.add('hidden');
     document.getElementById('menuSection').classList.remove('hidden');
@@ -121,16 +109,19 @@ async function createRestaurant() {
     const price = parseFloat(document.getElementById('nrPrice').value || '0');
     if (!name) return showToast('Xəta', 'Restoran adı daxil edin.');
     try {
-        await api('/restaurants/', 'POST', {
+        await api(editingRestaurant ? `/restaurants/${editingRestaurant}/` : '/restaurants/', editingRestaurant ? 'PATCH' : 'POST', {
             name,
             cuisine_type: document.getElementById('nrCuisine').value,
             average_price: price,
             address: document.getElementById('nrAddress').value.trim(),
+            website_url: document.getElementById('nrWebsite').value.trim(),
+            rating: Number(document.getElementById('nrRating').value || 0),
         });
         showToast('Restoran yaradıldı!', name);
         document.getElementById('nrName').value = '';
         document.getElementById('nrPrice').value = '';
         document.getElementById('nrAddress').value = '';
+        resetRestaurantForm();
         loadRestaurants();
     } catch (e) {
         showToast('Xəta', formatApiError(e));
@@ -153,7 +144,8 @@ async function deleteRestaurant(event, id, name) {
 async function loadMenuItems() {
     if (!selectedRestaurant) return;
     try {
-        const items = paginated(await api(`/restaurants/${selectedRestaurant}/menu-items/?page_size=100`));
+        const items = await window.lunchClient.all(`/restaurants/${selectedRestaurant}/menu-items/`);
+        menuItems = items;
         const restaurant = restaurants.find(r => r.id === selectedRestaurant);
         document.getElementById('menuTitle').innerText = `Menyu — ${restaurant ? restaurant.name : ''}`;
         document.getElementById('menuCount').innerText = items.length + ' yemək';
@@ -176,6 +168,7 @@ async function loadMenuItems() {
                     <i class="fa-solid fa-trash text-[10px]"></i>
                 </button>`;
             list.appendChild(row);
+            const edit = document.createElement('button'); edit.textContent = 'Düzəliş'; edit.className = 'text-xs px-2 text-amber-700'; edit.onclick = () => editMenuItem(mi); row.append(edit);
         });
     } catch (e) {
         showToast('Xəta', formatApiError(e));
@@ -186,12 +179,14 @@ async function createMenuItem() {
     if (!selectedRestaurant) return showToast('Xəta', 'Əvvəlcə restoran seçin.');
     const name = document.getElementById('miName').value.trim();
     const price = parseFloat(document.getElementById('miPrice').value || '0');
-    if (!name || price <= 0) return showToast('Xəta', 'Ad və qiymət daxil edin.');
+    if (!name || price < 0) return showToast('Xəta', 'Ad və düzgün qiymət daxil edin.');
     try {
-        await api(`/restaurants/${selectedRestaurant}/menu-items/`, 'POST', {
+        await api(`/restaurants/${selectedRestaurant}/menu-items/${editingMenuItem ? editingMenuItem + '/' : ''}`, editingMenuItem ? 'PATCH' : 'POST', {
             name,
             price,
             is_vegetarian: document.getElementById('miVeg').checked,
+            is_vegan: document.getElementById('miVegan').checked,
+            is_gluten_free: document.getElementById('miGlutenFree').checked,
             description: document.getElementById('miDesc').value.trim(),
         });
         showToast('Yemək əlavə olundu!', `${name} bütün istifadəçilər üçün görünür.`);
@@ -199,8 +194,9 @@ async function createMenuItem() {
         document.getElementById('miDesc').value = '';
         document.getElementById('miPrice').value = '';
         document.getElementById('miVeg').checked = false;
+        resetMenuForm();
         await loadMenuItems();
-        restaurants = paginated(await api('/restaurants/?page_size=100'));
+        restaurants = await window.lunchClient.all('/restaurants/');
         renderRestaurantList();
     } catch (e) {
         showToast('Xəta', formatApiError(e));
@@ -219,3 +215,27 @@ async function deleteMenuItem(id, name) {
 }
 
 window.addEventListener('DOMContentLoaded', gate);
+
+function editRestaurant(restaurant) {
+    editingRestaurant = restaurant.id;
+    for (const [id, key] of Object.entries({ nrName: 'name', nrPrice: 'average_price', nrAddress: 'address', nrCuisine: 'cuisine_type', nrWebsite: 'website_url', nrRating: 'rating' })) document.getElementById(id).value = restaurant[key];
+    document.getElementById('saveRestaurant').textContent = 'Dəyişiklikləri saxla';
+    document.getElementById('nrName').scrollIntoView({ block: 'center' });
+}
+function resetRestaurantForm() {
+    editingRestaurant = null;
+    for (const id of ['nrName', 'nrPrice', 'nrAddress', 'nrWebsite', 'nrRating']) document.getElementById(id).value = '';
+    document.getElementById('saveRestaurant').textContent = 'Restoran Yarat';
+}
+function editMenuItem(item) {
+    editingMenuItem = item.id;
+    for (const [id, key] of Object.entries({ miName: 'name', miPrice: 'price', miDesc: 'description' })) document.getElementById(id).value = item[key];
+    for (const [id, key] of Object.entries({ miVeg: 'is_vegetarian', miVegan: 'is_vegan', miGlutenFree: 'is_gluten_free' })) document.getElementById(id).checked = item[key];
+    document.getElementById('saveMenuItem').textContent = 'Dəyişiklikləri saxla';
+}
+function resetMenuForm() {
+    editingMenuItem = null;
+    for (const id of ['miName', 'miPrice', 'miDesc']) document.getElementById(id).value = '';
+    for (const id of ['miVeg', 'miVegan', 'miGlutenFree']) document.getElementById(id).checked = false;
+    document.getElementById('saveMenuItem').textContent = 'Menyuya Əlavə Et';
+}

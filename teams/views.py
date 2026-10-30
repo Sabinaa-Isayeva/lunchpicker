@@ -1,6 +1,7 @@
 import uuid
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -12,7 +13,7 @@ from rest_framework.views import APIView
 from core.permissions import IsTeamOwner, is_team_owner
 from core.utils import audit
 from teams.models import Membership, Team, TeamInviteToken
-from teams.serializers import InviteSerializer, MembershipSerializer, TeamSerializer
+from teams.serializers import InviteLinkSerializer, InviteSerializer, MembershipSerializer, TeamSerializer
 
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -26,30 +27,54 @@ class TeamViewSet(viewsets.ModelViewSet):
         return Team.objects.filter(members=user)
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve"):
-            self.permission_classes = []
-        return super().get_permissions()
+        if self.action in ("list", "retrieve", "members"):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsTeamOwner()]
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        with transaction.atomic():
+            team = serializer.save(created_by=self.request.user)
+        audit("team.create", self.request.user, f"team_id={team.pk}")
 
-    @action(detail=True, methods=["post"], permission_classes=[IsTeamOwner])
+    def perform_update(self, serializer):
+        team = serializer.save()
+        audit("team.update", self.request.user, f"team_id={team.pk}")
+
+    def perform_destroy(self, instance):
+        audit("team.delete", self.request.user, f"team_id={instance.pk}")
+        instance.delete()
+
+    @action(detail=True, methods=["get", "post"], permission_classes=[IsTeamOwner])
     def invite_link(self, request, pk=None):
         team = self.get_object()
-        days = int(request.data.get("days", 7))
+        if request.method == "GET":
+            tokens = team.invite_tokens.order_by("-created_at")
+            return Response(InviteLinkSerializer(tokens, many=True).data)
+        serializer = InviteLinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        days = serializer.validated_data["days"]
         token = TeamInviteToken.objects.create(
             team=team,
             created_by=request.user,
             expires_at=timezone.now() + timezone.timedelta(days=days) if days else None,
         )
         audit("team.invite_link", request.user, f"team_id={team.pk}")
-        return Response({
-            "token": str(token.token),
-            "url": f"/join/{token.token}/",
-            "expires_at": token.expires_at,
-        }, status=status.HTTP_201_CREATED)
+        return Response(InviteLinkSerializer(token).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["get", "post", "delete"], url_path="members")
+    @action(detail=True, methods=["delete"], url_path=r"invite_links/(?P<token>[0-9a-fA-F-]{36})")
+    def revoke_invite(self, request, pk=None, token=None):
+        try:
+            token = uuid.UUID(token)
+        except ValueError:
+            return Response({"detail": "Invalid invite token."}, status=400)
+        invite = get_object_or_404(self.get_object().invite_tokens, token=token)
+        invite.is_active = False
+        invite.save(update_fields=["is_active"])
+        audit("team.invite_revoke", request.user, f"team_id={invite.team_id}")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get", "post", "patch", "delete"], url_path="members")
+    @transaction.atomic
     def members(self, request, pk=None):
         team = self.get_object()
 
@@ -71,18 +96,23 @@ class TeamViewSet(viewsets.ModelViewSet):
                 defaults={"role": invite.validated_data["role"]},
             )
             if created:
-                team.members.add(user)
+                audit("team.member_add", request.user, f"team_id={team.pk} username={user.username}")
                 serializer = MembershipSerializer(membership)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             return Response({"detail": "User is already a member."}, status=status.HTTP_400_BAD_REQUEST)
 
-        username = request.query_params.get("username")
+        username = request.data.get("username") or request.query_params.get("username")
         if not username:
             return Response({"detail": "Provide ?username= to remove a member."}, status=status.HTTP_400_BAD_REQUEST)
         membership = get_object_or_404(team.memberships, user__username=username)
         if membership.user_id == team.created_by_id:
-            return Response({"detail": "The team owner cannot be removed."}, status=status.HTTP_400_BAD_REQUEST)
-        team.members.remove(membership.user)
+            return Response({"detail": "The founding owner's membership cannot be changed."}, status=status.HTTP_400_BAD_REQUEST)
+        if request.method == "PATCH":
+            serializer = MembershipSerializer(membership, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            audit("team.member_role", request.user, f"team_id={team.pk} username={username}")
+            return Response(serializer.data)
         membership.delete()
         audit("team.member_remove", request.user, f"team_id={team.pk} username={username}")
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -91,11 +121,14 @@ class TeamViewSet(viewsets.ModelViewSet):
 class JoinTeamView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def _get_token(self, token):
+    def _get_token(self, token, lock=False):
+        tokens = TeamInviteToken.objects.select_related("team")
+        if lock:
+            tokens = tokens.select_for_update()
         invite = get_object_or_404(
-            TeamInviteToken.objects.select_related("team"), token=token, is_active=True
+            tokens, token=token, is_active=True
         )
-        if invite.expires_at and invite.expires_at < timezone.now():
+        if invite.expires_at and invite.expires_at <= timezone.now():
             return None
         return invite
 
@@ -109,8 +142,9 @@ class JoinTeamView(APIView):
             "already_member": already,
         })
 
+    @transaction.atomic
     def post(self, request, token):
-        invite = self._get_token(token)
+        invite = self._get_token(token, lock=True)
         if not invite:
             return Response({"detail": "Bu dəvət linki etibarsızdır."}, status=404)
         membership, created = Membership.objects.get_or_create(
@@ -119,7 +153,6 @@ class JoinTeamView(APIView):
             defaults={"role": Membership.Role.MEMBER},
         )
         if created:
-            invite.team.members.add(request.user)
             audit("team.join", request.user, f"team_id={invite.team.pk} via_invite")
         serializer = MembershipSerializer(membership)
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -130,6 +163,6 @@ class JoinTeamPreviewView(APIView):
 
     def get(self, request, token):
         invite = TeamInviteToken.objects.filter(token=token, is_active=True).select_related("team").first()
-        if not invite or (invite.expires_at and invite.expires_at < timezone.now()):
+        if not invite or (invite.expires_at and invite.expires_at <= timezone.now()):
             return Response({"detail": "Bu dəvət linki etibarsızdır."}, status=404)
         return Response({"team_name": invite.team.name})

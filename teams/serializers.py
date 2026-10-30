@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from teams.models import Membership, Team
+from teams.models import Membership, Team, TeamInviteToken
 
 User = get_user_model()
 
@@ -55,3 +55,16 @@ class InviteSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("No such user.")
         return value
+
+
+class InviteLinkSerializer(serializers.ModelSerializer):
+    days = serializers.IntegerField(min_value=0, max_value=3650, default=7, write_only=True)
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TeamInviteToken
+        fields = ["token", "url", "days", "created_at", "expires_at", "is_active"]
+        read_only_fields = ["token", "created_at", "expires_at", "is_active"]
+
+    def get_url(self, obj):
+        return f"/join/{obj.token}/"

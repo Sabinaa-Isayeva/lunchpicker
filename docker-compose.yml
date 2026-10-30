@@ -1,10 +1,17 @@
 services:
+  cache:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
   db:
     image: postgres:15
     environment:
       POSTGRES_DB: lunchpicker
       POSTGRES_USER: lunchpicker
-      POSTGRES_PASSWORD: change-me-in-prod
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lunchpicker-local-password}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -14,19 +21,37 @@ services:
 
   web:
     build: .
-    environment:
+    environment: &app_environment
       # switches settings.py to Postgres when present
-      DATABASE_URL: postgresql://lunchpicker:change-me-in-prod@db:5432/lunchpicker
-      DJANGO_SECRET_KEY: change-me-in-prod
+      DATABASE_URL: postgresql://lunchpicker:${POSTGRES_PASSWORD:-lunchpicker-local-password}@db:5432/lunchpicker
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-development-only-change-this-secret-before-deployment}
       DJANGO_DEBUG: "0"
-      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,web,nginx,testserver"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,web,nginx,testserver}
       DJANGO_SECURE_SSL_REDIRECT: "0"
+      CACHE_URL: redis://cache:6379/1
     volumes:
       - static_files:/app/staticfiles
       - ./logs:/app/logs
     restart: unless-stopped
     depends_on:
       db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/health/', headers={'Host': os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost').split(',')[0]}))"]
+      interval: 5s
+      retries: 20
+
+  worker:
+    build: .
+    environment: *app_environment
+    command: ["sh", "-c", "while true; do python manage.py process_sessions; sleep 60; done"]
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    depends_on:
+      web:
         condition: service_healthy
 
   nginx:

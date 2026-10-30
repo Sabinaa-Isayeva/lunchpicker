@@ -3,21 +3,7 @@ let accessToken = localStorage.getItem('access');
 let tickets = [];
 let activeStatus = 'pending';
 
-async function api(path, method = 'GET', body = null) {
-    const headers = { 'Content-Type': 'application/json' };
-    if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
-    const res = await fetch(API + path, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : null,
-    });
-    if (!res.ok && res.status !== 204) {
-        const err = await res.json().catch(() => ({}));
-        throw Object.assign(new Error('API error'), { status: res.status, data: err });
-    }
-    if (res.status === 204) return null;
-    return res.json();
-}
+async function api(path, method = 'GET', body = null) { return window.lunchClient.request(path, method, body); }
 
 function paginated(json) { return json.results !== undefined ? json.results : json; }
 
@@ -40,9 +26,7 @@ function formatApiError(e) {
 }
 
 function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s == null ? '' : String(s);
-    return div.innerHTML;
+    return window.LunchAPI.escapeHTML(s);
 }
 
 function fmtDate(iso) {
@@ -54,7 +38,8 @@ async function gate() {
     if (!accessToken) return deny('Daxil olunmayıb. Əsas səhifədən daxil olun.');
     try {
         const me = await api('/users/me/');
-        if (!me.is_staff) return deny('Bu səhifə yalnız adminlər üçündür.');
+        const teams = await window.lunchClient.all('/teams/');
+        if (!me.is_staff && !teams.some(t => t.my_role === 'owner')) return deny('Komanda rəhbəri icazəsi tələb olunur.');
         document.getElementById('gate').classList.add('hidden');
         document.getElementById('appScreen').classList.remove('hidden');
         loadTickets();
@@ -71,7 +56,7 @@ function deny(msg) {
 // ---------- Tickets ----------
 async function loadTickets() {
     try {
-        tickets = paginated(await api('/suggestions/?page_size=200'));
+        tickets = await window.lunchClient.all('/suggestions/');
         renderStats();
         renderTickets();
     } catch (e) {

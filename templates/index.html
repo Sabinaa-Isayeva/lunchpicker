@@ -154,6 +154,7 @@
             </div>
 
             <div class="flex items-center gap-3 pl-2 border-l border-slate-800">
+                <a href="/workspace/" class="text-xs font-bold text-amber-400">Komandalar və idarəetmə</a>
                 <div class="relative">
                     <button onclick="toggleNotifications(event)" class="w-9 h-9 rounded-full bg-slate-800 text-slate-300 hover:text-amber-400 flex items-center justify-center transition" title="Bildirişlər">
                         <i class="fa-solid fa-bell text-sm"></i>
@@ -183,6 +184,13 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <section class="lg:col-span-8 space-y-6">
 
+            <div class="glass-card rounded-2xl p-4 grid sm:grid-cols-2 gap-3">
+                <label class="text-xs font-bold">Komanda<select id="mainTeamSelect" onchange="chooseMainTeam(this.value)" class="w-full mt-2 p-2 border rounded-xl" aria-label="Komanda"></select></label>
+                <label class="text-xs font-bold">Sessiya<select id="mainSessionSelect" onchange="chooseMainSession(this.value)" class="w-full mt-2 p-2 border rounded-xl" aria-label="Sessiya"></select></label>
+                <a href="/workspace/#teams" class="text-xs font-bold underline">Komanda yarat, dəvət et və üzvləri idarə et</a>
+                <a href="/workspace/#history" class="text-xs font-bold underline">Tarixçə və statistika</a>
+            </div>
+            <div id="resultBox" class="hidden glass-card rounded-2xl p-5 text-sm font-bold" role="status"></div>
             <!-- Banner / Timer -->
             <div class="relative overflow-hidden rounded-3xl bg-slate-900 p-8 text-white shadow-xl border border-slate-800">
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -367,6 +375,7 @@
     </main>
     </div>
 
+    <script src="/static/api.js"></script>
     <script>
         const API = '/api';
         let accessToken = localStorage.getItem('access');
@@ -379,35 +388,16 @@
 
         // ---------- API helper ----------
         async function api(path, method = 'GET', body = null) {
-            const headers = { 'Content-Type': 'application/json' };
-            if (accessToken) headers['Authorization'] = 'Bearer ' + accessToken;
-            const res = await fetch(API + path, {
-                method,
-                headers,
-                body: body ? JSON.stringify(body) : null,
-            });
-            if (res.status === 401 && localStorage.getItem('refresh')) {
-                const refreshed = await fetch(API + '/auth/token/refresh/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refresh: localStorage.getItem('refresh') }),
-                });
-                if (refreshed.ok) {
-                    const data = await refreshed.json();
-                    accessToken = data.access;
-                    localStorage.setItem('access', accessToken);
-                    headers['Authorization'] = 'Bearer ' + accessToken;
-                    return fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : null });
-                }
-                logout();
-            }
-            if (!res.ok && res.status !== 204) {
-                const err = await res.json().catch(() => ({}));
-                throw Object.assign(new Error('API error'), { status: res.status, data: err });
-            }
-            if (res.status === 204) return null;
-            return res.json();
+            return window.lunchClient.request(path, method, body);
         }
+        async function all(path) { return window.lunchClient.all(path); }
+        let teamsCache = [], currentTeam = null;
+        let selectedSessionId = Number(new URLSearchParams(location.search).get('session')) || null;
+        async function chooseMainTeam(id) {
+            localStorage.setItem('active_team', id); selectedSessionId = null;
+            history.replaceState(null, '', '/?team=' + id); await enterApp();
+        }
+        async function chooseMainSession(id) { selectedSessionId = Number(id); await enterApp(); }
 
         function paginated(json) { return json.results !== undefined ? json.results : json; }
 
@@ -522,8 +512,28 @@
                     document.getElementById('userName').innerText = '@' + me.username;
                 }
 
-                const sessions = paginated(await api('/sessions/'));
-                currentSession = sessions.find(s => s.is_announcement && s.is_active) || sessions.find(s => s.is_active) || sessions[0] || null;
+                teamsCache = await all('/teams/');
+                const requestedTeam = Number(new URLSearchParams(location.search).get('team')) || Number(localStorage.getItem('active_team'));
+                currentTeam = teamsCache.find(t => t.id === requestedTeam) || teamsCache[0] || null;
+                if (currentTeam) localStorage.setItem('active_team', currentTeam.id);
+                document.getElementById('mainTeamSelect').innerHTML = teamsCache.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('') || '<option>Komanda yaradın və ya dəvətlə qoşulun</option>';
+                document.getElementById('mainTeamSelect').value = currentTeam?.id || '';
+                const manages = Boolean(me?.is_staff || currentTeam?.my_role === 'owner');
+                document.getElementById('adminPanel').classList.toggle('hidden', !manages);
+                document.getElementById('groupFoodBox').classList.toggle('hidden', !me?.is_staff);
+                document.querySelector('a[href="/food-admin/"]').classList.toggle('hidden', !me?.is_staff);
+                document.getElementById('cloneBtn').classList.toggle('hidden', !manages);
+                if (manages) await loadPendingTickets();
+                const sessions = currentTeam ? await all(`/sessions/?team=${currentTeam.id}`) : [];
+                currentSession = sessions.find(s => s.id === selectedSessionId) || sessions.find(s => s.is_announcement && s.is_active) || sessions.find(s => s.is_active) || sessions[0] || null;
+                document.getElementById('mainSessionSelect').innerHTML = sessions.map(s => `<option value="${s.id}">${escapeHtml(s.title)}</option>`).join('') || '<option>Sessiya yoxdur</option>';
+                document.getElementById('mainSessionSelect').value = currentSession?.id || '';
+                document.getElementById('participantList').replaceChildren();
+                document.getElementById('inviteBtn').classList.add('hidden');
+                document.getElementById('resultBox').classList.add('hidden');
+                document.getElementById('avgCost').innerText = '—'; document.getElementById('leaderCost').innerText = '—';
+                clearInterval(timerInterval);
+                await loadNotifications();
 
                 if (!currentSession) {
                     document.getElementById('sessionTitle').innerText = 'Nahar Kataloqu';
@@ -545,6 +555,7 @@
                 updateBudget();
                 loadNotifications();
                 maybeShowInviteButton();
+                await renderMainResult();
 
                 if (!currentSession.is_active) {
                     try {
@@ -561,17 +572,24 @@
         function updateSessionStatus() {
             const dot = document.getElementById('sessionDot');
             const label = document.getElementById('sessionStatus');
+            currentSession.is_active = new Date(currentSession.start_time) <= new Date() && new Date() <= new Date(currentSession.end_time);
+            if (new Date(currentSession.start_time) > new Date()) { dot.className = 'w-2 h-2 rounded-full bg-amber-400'; label.innerText = 'Planlaşdırılıb'; return; }
             if (currentSession.is_active) { dot.className = 'w-2 h-2 rounded-full bg-emerald-400'; label.innerText = 'Səsvermə Aktiv'; }
             else { dot.className = 'w-2 h-2 rounded-full bg-slate-500'; label.innerText = 'Sessiya Bağlandı'; }
         }
 
+        let proposalLoadVersion = 0;
         async function loadProposals() {
-            const proposals = paginated(await api(`/sessions/${currentSession.id}/proposals/`));
-            myVotes = {};
-            try {
-                const votes = paginated(await api(`/sessions/${currentSession.id}/votes/`));
-                votes.forEach(v => { myVotes[v.proposal] = v.choice; });
-            } catch (_) {}
+            const version = ++proposalLoadVersion;
+            const sessionId = currentSession.id;
+            const [proposalData, voteData] = await Promise.all([
+                api(`/sessions/${sessionId}/proposals/`), api(`/sessions/${sessionId}/votes/`),
+            ]);
+            if (version !== proposalLoadVersion || currentSession?.id !== sessionId) return;
+            const proposals = paginated(proposalData);
+            const nextVotes = {};
+            paginated(voteData).filter(v => v.voter === currentUser.id).forEach(v => { nextVotes[v.proposal] = v.choice; });
+            myVotes = nextVotes;
 
             const container = document.getElementById('proposalList');
             container.innerHTML = '';
@@ -621,7 +639,7 @@
                         </button>
                         <div class="flex items-center gap-2 ${voted ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200'} px-4 py-2 rounded-2xl border shrink-0">
                             <span class="vote-count ${voted ? 'text-white' : 'text-slate-800'} font-extrabold text-base">${p.vote_count}</span>
-                            <span class="${voted ? 'text-slate-400' : 'text-slate-500'} text-xs font-medium">Səs</span>
+                                <span class="${voted ? 'text-slate-400' : 'text-slate-500'} text-xs font-medium">Səs ${currentSession.voting_mode === 'rating' ? '· ' + p.vote_score + ' bal' : ''}</span>
                         </div>
                     </div>
                 </div>
@@ -634,10 +652,12 @@
                         <div class="w-6 h-6 rounded-full bg-slate-900 text-amber-400 flex items-center justify-center text-[10px] font-bold">${proposerInitials}</div>
                         <span class="text-xs text-slate-500">Təklif etdi: <b class="text-slate-700">${escapeHtml(p.proposer_name || '?')}</b></span>
                     </div>
-                    <button type="button" data-proposal-id="${p.id}" onclick="toggleVote(this, ${p.id})"
+                    <div class="flex items-center gap-2">
+                    ${currentSession.voting_mode === 'rating' ? `<select aria-label="${escapeHtml(p.restaurant_name)} üçün bal" class="rating-select p-2 border rounded-lg text-xs" onchange="rateProposal(this, ${p.id})">${[1,2,3,4,5].map(n => `<option value="${n}" ${n === (myRating || 5) ? 'selected' : ''}>${n} ★</option>`).join('')}</select>` : ''}
+                    <button type="button" ${!currentSession.is_active || currentTeam?.my_role === 'guest' ? 'disabled' : ''} data-proposal-id="${p.id}" onclick="toggleVote(this, ${p.id})"
                         class="vote-btn ${voted ? 'bg-amber-500/10 text-amber-600 border border-amber-400/40' : 'bg-slate-100 hover:bg-slate-900 hover:text-amber-400'} interactive-btn text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
                         <i class="${voted ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i> ${voted ? `Səs Verilib &#9733;${myRating}` : 'Səs Ver'}
-                    </button>
+                    </button></div>
                 </div>`;
             return card;
         }
@@ -645,7 +665,7 @@
         // ---------- Catalog (visible to everyone) ----------
         async function renderCatalog() {
             try {
-                restaurantsCache = paginated(await api('/restaurants/'));
+                restaurantsCache = await all('/restaurants/');
                 const container = document.getElementById('proposalList');
                 if (!restaurantsCache.length) {
                     container.innerHTML = '<div class="glass-card rounded-3xl p-8 text-center text-xs font-semibold text-slate-400">Kataloqda restoran yoxdur.</div>';
@@ -696,9 +716,7 @@
         }
 
         function escapeHtml(s) {
-            const div = document.createElement('div');
-            div.textContent = s == null ? '' : String(s);
-            return div.innerHTML;
+            return window.LunchAPI.escapeHTML(s);
         }
 
         let vegOnly = false;
@@ -712,14 +730,13 @@
             const btn = starBtn.closest ? starBtn.closest('.vote-btn') : starBtn;
             const card = btn.closest('.proposal-card');
             const restaurantName = card.querySelector('h3').innerText;
-            const countEl = card.querySelector('.vote-count');
+            const sessionId = currentSession.id;
+            ++proposalLoadVersion;
             try {
-                await api(`/sessions/${currentSession.id}/votes/`, 'POST', { proposal: proposalId, choice: rating });
-                myVotes[proposalId] = rating;
-                countEl.innerText = parseInt(countEl.innerText) + 1;
-                setVoteBtnState(btn, true, rating);
+                await api(`/sessions/${sessionId}/votes/`, 'POST', { proposal: proposalId, choice: rating });
+                if (currentSession?.id !== sessionId) return;
+                await loadProposals(); await loadParticipants(); await updateBudget();
                 showToast('Uğurlu səs!', `${restaurantName} — ${rating} ulduz.`);
-                loadParticipants();
             } catch (e) {
                 showToast('Xəta', formatApiError(e));
             }
@@ -728,21 +745,23 @@
         async function toggleVote(btn, proposalId) {
             const card = btn.closest('.proposal-card');
             const restaurantName = card.querySelector('h3').innerText;
-            const countEl = card.querySelector('.vote-count');
             try {
                 if (myVotes[proposalId] !== undefined) {
-                    await api(`/sessions/${currentSession.id}/votes/`, 'DELETE', { proposal: proposalId });
-                    delete myVotes[proposalId];
-                    countEl.innerText = Math.max(parseInt(countEl.innerText) - 1, 0);
-                    setVoteBtnState(btn, false);
+                    const sessionId = currentSession.id;
+                    ++proposalLoadVersion;
+                    await api(`/sessions/${sessionId}/votes/`, 'DELETE', { proposal: proposalId });
+                    if (currentSession?.id !== sessionId) return;
+                    await loadProposals(); await loadParticipants(); await updateBudget();
                     showToast('Səs ləğv edildi', `${restaurantName} üçün səsini geri aldın.`);
-                    loadParticipants();
                 } else {
-                    await castVote(btn, proposalId, 5);
+                    await castVote(btn, proposalId, currentSession.voting_mode === 'rating' ? Number(card.querySelector('.rating-select').value) : 1);
                 }
             } catch (e) {
                 showToast('Xəta', formatApiError(e));
             }
+        }
+        async function rateProposal(select, proposalId) {
+            if (myVotes[proposalId] !== undefined) await castVote(select.closest('.proposal-card').querySelector('.vote-btn'), proposalId, Number(select.value));
         }
         function openStars(btn, proposalId){
             toggleVote(btn, proposalId);
@@ -765,11 +784,12 @@
 
         // ---------- Suggestion ticket ----------
         async function addProposal() {
+            if (currentTeam?.my_role === 'guest') { showToast('Xəta', 'Qonaqların yalnız baxış icazəsi var.'); return; }
             if (!currentSession) { showToast('Xəta', 'Aktiv sessiya yoxdur.'); return; }
             if (!currentSession.is_active) { showToast('Xəta', 'Sessiya artıq bağlanıb.'); return; }
 
             try {
-                restaurantsCache = paginated(await api('/restaurants/'));
+                restaurantsCache = await all('/restaurants/');
                 const select = document.getElementById('sgRestaurant');
                 select.innerHTML = restaurantsCache.map(r =>
                     `<option value="${r.id}">${escapeHtml(r.name)} (${cuisineLabels[r.cuisine_type] || r.cuisine_type})</option>`
@@ -837,7 +857,7 @@
                     box.innerHTML = '<p class="text-[11px] text-slate-400 font-semibold">Gözləyən təklif yoxdur.</p>';
                     return;
                 }
-                box.innerHTML = tickets.slice(0, 5).map(t => `
+                box.innerHTML = pending.slice(0, 5).map(t => `
                     <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                         <div class="min-w-0">
                             <p class="text-xs font-bold text-slate-800 truncate">${escapeHtml(t.restaurant_name)}</p>
@@ -861,7 +881,7 @@
                 const start = document.getElementById('nsStart').value;
                 const end = document.getElementById('nsEnd').value;
                 if (!title || !start || !end) { showToast('Xəta', 'Bütün sahələri doldurun.'); return; }
-                const teams = paginated(await api('/teams/'));
+                const teams = currentTeam ? [currentTeam] : [];
                 if (!teams.length) { showToast('Xəta', 'Komanda tapılmadı.'); return; }
                 const payload = {
                     team_id: teams[0].id,
@@ -985,7 +1005,7 @@
             try {
                 const res = await api(`/teams/${currentSession.team.id}/invite_link/`, 'POST', { days: 7 });
                 const url = location.origin + res.url;
-                try { navigator.clipboard.writeText(url); } catch (_) {}
+                try { await navigator.clipboard.writeText(url); } catch (_) { window.prompt('Dəvət linkini kopyalayın:', url); }
                 showToast('D\u0259v\u0259t linki haz\u0131r!', 'Link bufer\u0259 kopyaland\u0131: ' + url);
             } catch (e) {
                 showToast('X\u0259ta', formatApiError(e));
@@ -1002,14 +1022,14 @@
 
         async function loadParticipants() {
             try {
-                const members = paginated(await api(`/teams/${currentSession.team.id}/members/`));
+                const members = await all(`/teams/${currentSession.team.id}/members/`);
                 const votes = paginated(await api(`/sessions/${currentSession.id}/votes/`));
                 const voters = new Set(votes.map(v => v.voter));
 
                 const list = document.getElementById('participantList');
                 list.innerHTML = '';
                 members.forEach(m => {
-                    const voted = voters.has(m.user);
+                    const voted = !currentSession.is_anonymous && voters.has(m.user);
                     const initials = (m.username || '?').slice(0, 2).toUpperCase();
                     const row = document.createElement('div');
                     row.className = 'flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition' + (voted ? '' : ' opacity-75');
@@ -1024,11 +1044,11 @@
                         <span class="text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ${voted
                             ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
                             : 'text-amber-700 bg-amber-50 border border-amber-200'}">
-                            <i class="fa-solid ${voted ? 'fa-check' : 'fa-regular fa-clock'}"></i> ${voted ? 'Səs Verdi' : 'Gözləyir'}
+                            <i class="fa-solid ${voted ? 'fa-check' : 'fa-regular fa-clock'}"></i> ${currentSession.is_anonymous ? 'Anonim' : voted ? 'Səs Verdi' : 'Gözləyir'}
                         </span>`;
                     list.appendChild(row);
                 });
-                document.getElementById('voteProgress').innerText = `${voters.size}/${members.length} Səs Verib`;
+                document.getElementById('voteProgress').innerText = currentSession.is_anonymous ? 'Anonim' : `${voters.size}/${members.length} Səs Verib`;
             } catch (_) {}
         }
 
@@ -1037,7 +1057,7 @@
                 const proposals = paginated(await api(`/sessions/${currentSession.id}/proposals/`));
                 if (!proposals.length) return;
                 const avg = proposals.reduce((sum, p) => sum + Number(p.average_price), 0) / proposals.length;
-                const leader = [...proposals].sort((a, b) => b.vote_count - a.vote_count)[0];
+                const leader = [...proposals].sort((a, b) => currentSession.voting_mode === 'rating' ? b.vote_score - a.vote_score : b.vote_count - a.vote_count)[0];
                 document.getElementById('avgCost').innerText = avg.toFixed(2) + ' AZN';
                 document.getElementById('leaderCost').innerText = Number(leader.average_price).toFixed(2) + ' AZN';
             } catch (_) {}
@@ -1053,7 +1073,7 @@
                 document.getElementById('timer-h').innerText = String(Math.floor(diff / 3600)).padStart(2, '0');
                 document.getElementById('timer-m').innerText = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
                 document.getElementById('timer-s').innerText = String(diff % 60).padStart(2, '0');
-                if (diff <= 0) { clearInterval(timerInterval); updateSessionStatus(); }
+                if (diff <= 0) { clearInterval(timerInterval); updateSessionStatus(); renderMainResult(); }
             };
             tick();
             timerInterval = setInterval(tick, 1000);
@@ -1099,8 +1119,25 @@
             if (event.target === modal) closeModal();
         };
 
+        async function renderMainResult() {
+            if (!currentSession || new Date(currentSession.end_time) > new Date()) return;
+            const box = document.getElementById('resultBox'); box.classList.remove('hidden');
+            try {
+                const result = await api(`/sessions/${currentSession.id}/result/`);
+                box.textContent = 'Seçildi: ' + result.restaurant + ' · ' + result.method_display;
+            } catch (error) {
+                box.textContent = 'Sessiya bitib. Nəticə avtomatik hesablanır.';
+                if (currentUser?.is_staff || currentTeam?.my_role === 'owner') {
+                    const button = document.createElement('button'); button.className = 'ml-3 px-3 py-2 bg-amber-400 rounded-lg'; button.textContent = 'Nəticəni indi seç';
+                    button.onclick = async () => { try { await api(`/sessions/${currentSession.id}/result/`, 'POST', {}); await renderMainResult(); await loadNotifications(); } catch (e) { showToast('Xəta', formatApiError(e)); } };
+                    box.append(button);
+                }
+            }
+        }
         // ---------- Boot ----------
         window.addEventListener('DOMContentLoaded', () => {
+            const pending = new URLSearchParams(location.search).get('join');
+            if (pending && /^[0-9a-f-]{36}$/i.test(pending)) localStorage.setItem('pending_join', pending);
             switchTab('login');
             if (accessToken) {
                 enterApp();
@@ -1108,6 +1145,19 @@
                 document.getElementById('authScreen').classList.remove('hidden');
             }
         });
+        let refreshingScreen = false;
+        setInterval(async () => {
+            if (refreshingScreen || document.hidden || !currentUser || !localStorage.getItem('access')) return;
+            refreshingScreen = true;
+            try {
+                await loadNotifications();
+                if (currentSession) {
+                    updateSessionStatus();
+                    if (currentSession.is_active) { await loadProposals(); await loadParticipants(); await updateBudget(); }
+                    else await renderMainResult();
+                }
+            } catch (_) {} finally { refreshingScreen = false; }
+        }, 30000);
     </script>
 </body>
 </html>

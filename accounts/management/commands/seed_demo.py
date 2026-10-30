@@ -42,9 +42,7 @@ class Command(BaseCommand):
             name="Office Squad",
             defaults={"description": "Daily office lunch crew", "created_by": users["sabina"]},
         )
-        for username in users:
-            team.members.add(users[username])
-        Membership.objects.get_or_create(team=team, user=users["sabina"], defaults={"role": Membership.Role.OWNER})
+        Membership.objects.update_or_create(team=team, user=users["sabina"], defaults={"role": Membership.Role.OWNER})
         for username in ("ali", "leyla", "reshad"):
             Membership.objects.get_or_create(team=team, user=users[username], defaults={"role": Membership.Role.MEMBER})
 

@@ -17,4 +17,4 @@ RUN mkdir -p /app/logs /app/staticfiles && touch /app/logs/audit.log && python m
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn lunchpicker.wsgi:application --bind 0.0.0.0:8000 --workers 3"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn lunchpicker.wsgi:application --bind 0.0.0.0:8000 --workers 3"]

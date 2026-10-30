@@ -9,6 +9,12 @@ from teams.models import Membership, Team
 User = get_user_model()
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    from django.core.cache import cache
+    cache.clear()
+
+
 def make_user(username, **extra):
     defaults = {"email": f"{username}@test.local", "password": "pass12345!"}
     defaults.update(extra)

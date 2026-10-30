@@ -1,0 +1,12 @@
+# Django 5.2 LTS supports the specification's Python 3.11 runtime.
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.19
+djangorestframework-simplejwt>=5.5,<6
+django-filter>=25.1,<26
+argon2-cffi>=25.1,<26
+django-ratelimit>=4.1,<5
+factory-boy>=3.3,<4
+pytest>=8.3,<9
+pytest-django>=4.11,<5
+coverage>=7.8,<8
+redis>=5,<7

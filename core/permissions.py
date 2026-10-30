@@ -2,7 +2,10 @@ from rest_framework.permissions import BasePermission
 
 
 def is_team_owner(user, team):
-    return team.created_by_id == user.pk
+    return bool(user.is_authenticated and (
+        team.created_by_id == user.pk
+        or team.memberships.filter(user=user, role="owner").exists()
+    ))
 
 
 def is_team_member(user, team):
@@ -12,16 +15,24 @@ def is_team_member(user, team):
 class IsTeamOwner(BasePermission):
     message = "Only the team owner (or an admin) can perform this action."
 
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
     def has_object_permission(self, request, view, obj):
-        team = obj if hasattr(obj, "created_by") else obj.team
+        team = obj if hasattr(obj, "memberships") else obj.team
         return is_team_owner(request.user, team) or request.user.is_staff
 
 
 class IsTeamMember(BasePermission):
     message = "You must be a member of this team."
 
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
     def has_object_permission(self, request, view, obj):
-        team = obj if hasattr(obj, "members") else obj.session.team
+        team = obj if hasattr(obj, "memberships") else getattr(obj, "team", None)
+        if team is None:
+            team = obj.session.team
         return is_team_member(request.user, team) or request.user.is_staff
 
 

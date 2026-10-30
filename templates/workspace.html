@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Komandalar və idarəetmə — Lunch Picker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+        body input, body select, body textarea { border: 1px solid #cbd5e1; padding: .65rem; border-radius: .65rem; width: 100%; background: white; }
+        body input[type=checkbox] { width: auto; }
+        body label { display: block; font-size: .8rem; font-weight: 600; }
+        body button, body .button { padding: .55rem .9rem; border-radius: .65rem; background: #0f172a; color: white; font-size: .8rem; font-weight: 600; }
+        body nav button[aria-pressed=true] { background: #f59e0b; color: #0f172a; }
+        body :focus-visible { outline: 2px solid #d97706; outline-offset: 3px; }
+        button:disabled { opacity: .45; cursor: not-allowed; }
+        .secondary { background: #e2e8f0; color: #0f172a; } .danger { background: #be123c; }
+        .panel { background: white; border: 1px solid #e2e8f0; border-radius: 1.2rem; padding: 1.4rem; }
+        body h2 { font-size: 1.1rem; font-weight: 800; margin-bottom: 1rem; }
+        body h3 { font-weight: 700; margin-bottom: .6rem; }
+        .row { border-bottom: 1px solid #e2e8f0; padding: .8rem 0; display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; }
+        [hidden] { display: none !important; }
+        #workspace[aria-busy=true] { opacity: .7; cursor: progress; }
+    </style>
+</head>
+<body>
+<header class="bg-slate-900 text-white p-4">
+    <div class="max-w-6xl mx-auto flex flex-wrap items-center gap-4 justify-between">
+        <a href="/" class="text-xl font-black">Lunch<span class="text-amber-400">Picker</span></a>
+        <p id="identity" class="text-sm"></p><a class="button bg-amber-500" href="/">Səsverməyə qayıt</a>
+    </div>
+</header>
+<main class="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+    <div id="message" role="status" aria-live="polite" hidden class="panel"></div>
+    <div id="loginRequired" class="panel" hidden><p>Əvvəlcə <a class="underline" href="/">daxil olun və ya qeydiyyatdan keçin</a>.</p></div>
+    <div id="workspace" hidden class="space-y-6">
+        <nav class="flex flex-wrap gap-2" aria-label="İdarəetmə">
+            <button data-tab="teams">Komandalar</button><button data-tab="sessions">Sessiyalar</button>
+            <button data-tab="history">Tarixçə və statistika</button><button data-tab="profile">Profil</button>
+            <button data-tab="system" id="systemTab" hidden>Sistem idarəsi</button>
+            <a href="/admin-panel/" class="button">Təkliflər</a><a id="foodLink" href="/food-admin/" class="button" hidden>Restoran və menyular</a>
+        </nav>
+        <label id="teamPicker">Komanda<select id="teamSelect" class="mt-2" aria-label="Aktiv komanda"></select></label>
+        <section data-panel="teams" class="grid md:grid-cols-2 gap-6">
+            <div class="panel space-y-5">
+                <h2>Komandalarınız</h2><div id="teamList"></div>
+                <form id="createTeamForm" class="space-y-3">
+                    <h3>Yeni komanda</h3><label>Ad<input name="name" maxlength="120" required></label>
+                    <label>Təsvir<textarea name="description"></textarea></label><button>Komanda yarat</button>
+                </form>
+                <form id="joinForm" class="space-y-3"><h3>Dəvətlə qoşul</h3>
+                    <label>Dəvət linki və ya kodu<input name="invite" required placeholder="https://…/join/…/"></label><button>Dəvəti aç</button>
+                </form>
+            </div>
+            <div class="panel space-y-5">
+                <h2 id="teamHeading">Komanda seçin</h2>
+                <form id="editTeamForm" class="space-y-3" hidden>
+                    <label>Ad<input name="name" required maxlength="120"></label><label>Təsvir<textarea name="description"></textarea></label>
+                    <button>Yadda saxla</button><button id="deleteTeam" type="button" class="danger">Komandanı sil</button>
+                </form>
+                <div><h3>Üzvlər</h3><div id="members"></div></div>
+                <form id="inviteMemberForm" class="space-y-3" hidden>
+                    <h3>İstifadəçi əlavə et</h3><label>İstifadəçi adı<input name="username" required></label>
+                    <label>Rol<select name="role"><option value="member">Üzv</option><option value="guest">Qonaq (yalnız baxış)</option><option value="owner">Komanda rəhbəri</option></select></label><button>Əlavə et</button>
+                </form>
+                <div id="inviteManagement" hidden class="space-y-3">
+                    <form id="inviteLinkForm" class="space-y-3"><h3>Dəvət linkləri</h3><label>Etibarlılıq (gün, 0 = müddətsiz)<input name="days" type="number" min="0" max="3650" value="7" required></label><button>Link yarat</button></form>
+                    <label id="newInviteWrap" hidden>Yeni link<input id="newInvite" readonly></label><div id="inviteLinks"></div>
+                </div>
+            </div>
+        </section>
+        <section data-panel="sessions" hidden class="grid md:grid-cols-2 gap-6">
+            <div class="panel"><h2>Komandanın sessiyaları</h2><div id="sessions"></div></div>
+            <div class="panel"><h2 id="sessionFormTitle">Sessiya yarat</h2>
+                <p id="sessionPermission" hidden>Yalnız komanda rəhbəri sessiyaları idarə edə bilər.</p>
+                <form id="sessionForm" class="space-y-3">
+                    <label>Başlıq<input name="title" required maxlength="150"></label>
+                    <label>Başlama vaxtı<input name="start_time" type="datetime-local" required></label>
+                    <label>Bitmə vaxtı<input name="end_time" type="datetime-local" required></label>
+                    <label>Seçim alqoritmi<select name="selection_algorithm"><option value="majority">Çoxluq / bal cəmi</option><option value="random">Təsadüfi</option><option value="weighted">Çəkili üstünlük</option></select></label>
+                    <label>Səsvermə üsulu<select name="voting_mode"><option value="single">Bir seçim</option><option value="multiple">Çox seçim</option><option value="rating">1–5 ulduz</option></select></label>
+                    <label>Təkrar<select name="recurrence_rule"><option value="">Təkrarlanmır</option><option value="daily">Hər gün</option><option value="weekly">Hər həftə</option></select></label>
+                    <label><input name="is_anonymous" type="checkbox"> Anonim səsvermə</label>
+                    <label><input name="is_announcement" type="checkbox"> Elan kimi göstər</label>
+                    <button id="saveSession">Sessiya yarat</button><button type="button" id="cancelSessionEdit" class="secondary">Yeni sessiya</button>
+                </form>
+            </div>
+        </section>
+        <section data-panel="history" hidden class="space-y-5">
+            <form id="historyForm" class="panel grid md:grid-cols-5 gap-3 items-end">
+                <label>Tarixçə<select name="scope"><option value="team">Komanda</option><option value="me">Şəxsi</option></select></label>
+                <label>Başlanğıc<input name="start" type="date"></label><label>Son tarix<input name="end" type="date"></label>
+                <label>Restoran<input name="restaurant" placeholder="Ad və ya ID"></label><button>Filtrlə</button>
+            </form>
+            <div class="panel"><h2>Statistika</h2><div id="analytics"></div></div>
+            <div class="panel"><h2>Nahar tarixçəsi</h2><div id="history"></div></div>
+        </section>
+        <section data-panel="profile" hidden class="panel max-w-xl">
+            <h2>Profiliniz</h2><form id="profileForm" class="space-y-3">
+                <label>İstifadəçi adı<input name="username" required></label><label>Email<input name="email" type="email" required></label>
+                <label>Ad<input name="first_name"></label><label>Soyad<input name="last_name"></label>
+                <label>Yeni şifrə (istəyə bağlı)<input name="password" type="password" minlength="8" autocomplete="new-password"></label><button>Profili yenilə</button>
+            </form>
+        </section>
+        <section data-panel="system" hidden class="space-y-5">
+            <div class="panel"><h2>Ümumi istifadə statistikası</h2><div id="systemMetrics" class="flex flex-wrap gap-4"></div></div>
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="panel"><h2>Standart qaydalar</h2><form id="settingsForm" class="space-y-3">
+                    <label>Seçim alqoritmi<select name="default_selection_algorithm"><option value="majority">Çoxluq</option><option value="random">Təsadüfi</option><option value="weighted">Çəkili</option></select></label>
+                    <label>Səsvermə üsulu<select name="default_voting_mode"><option value="single">Bir seçim</option><option value="multiple">Çox seçim</option><option value="rating">1–5 ulduz</option></select></label>
+                    <label>Müddət (dəqiqə)<input name="voting_deadline_minutes" type="number" min="1" max="10080" required></label>
+                    <label>Çəkili seçimdə baza çəkisi<input name="weighted_base_weight" type="number" min="1" max="1000" required></label>
+                    <label><input name="allow_anonymous_voting" type="checkbox"> Anonim səsverməyə icazə</label><button>Qaydaları saxla</button>
+                </form></div>
+                <div class="panel"><h2>İstifadəçilər</h2><input id="userSearch" placeholder="İstifadəçi axtar" aria-label="İstifadəçi axtar"><button id="searchUsers" class="mt-2">Axtar</button><div id="users"></div></div>
+            </div>
+        </section>
+    </div>
+</main>
+<script src="/static/api.js"></script><script src="/static/workspace.js"></script>
+</body></html>

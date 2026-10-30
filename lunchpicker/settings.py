@@ -118,8 +118,17 @@ SIMPLE_JWT = {
 RATELIMIT_VOTES_PER_MINUTE = 5
 RATELIMIT_ENABLE = True
 
+# Share vote limits across Gunicorn workers when Redis is configured.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+if os.environ.get("CACHE_URL"):
+    CACHES = {"default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": os.environ["CACHE_URL"],
+    }}
+
 # HTTPS / security - enforced in production via env
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_REDIRECT_EXEMPT = [r"health/$"]
 if not DEBUG:
     # Redirect to HTTPS only when explicitly enabled. The default
     # docker-compose stack serves plain HTTP behind nginx, so leaving

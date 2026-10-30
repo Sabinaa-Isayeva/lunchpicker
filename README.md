@@ -1,180 +1,132 @@
-# Lunch Picker
+﻿# Lunch Picker
 
-A small internal tool for teams who can never agree on where to eat. Someone opens a lunch session, people propose restaurants, everyone votes, and the app picks a winner instead of the group arguing about it in Slack for twenty minutes. It's a Django + Django REST Framework backend with a plain HTML/JS frontend bolted on top — no build step, no frontend framework, just static pages served straight from Django's template engine.
+A Django application for coordinating team lunches. The interface is in Azerbaijani and uses plain HTML/JavaScript with Tailwind CSS. The API uses JWT authentication.
 
-The interface itself is in Azerbaijani (this looks like it was built for a specific office — usernames in the demo seed are Azerbaijani names, and toast messages, error strings, etc. are in Azerbaijani too). The code and this README are in English.
+## Included workflows
 
-## What it actually does
+- Teams: create, edit, delete, select between teams, invite by username or expiring link, revoke links, assign owner/member/guest roles and remove members.
+- Sessions: schedule one-time/daily/weekly lunches, set deadlines, anonymity, voting mode and selection algorithm; edit, clone and delete sessions.
+- Voting: single choice, multiple choice and 1–5 ratings, with changes and withdrawals before the deadline. Guests have read-only access.
+- Catalog: administrator CRUD for restaurants and menus, including websites, ratings, prices, vegetarian/vegan/gluten-free flags.
+- Suggestions: members submit tickets; team owners or administrators approve/reject them.
+- Results: a scheduled worker automatically selects a winner, persists history, notifies members and schedules recurring sessions. Owners can also finalize an ended session manually.
+- History and analytics: personal/team history with date and restaurant filters, restaurant/cuisine trends, participation and administrator usage totals.
+- Profiles and administration: profile/password changes, account status/roles and global voting defaults/weighting.
 
-- **Teams** — you create a team, invite people to it either by username or by generating a shareable invite link (`/join/<uuid-token>/`). Teams have an owner and members; owners can promote/demote or remove people.
-- **Restaurants & menus** — a shared catalog of restaurants with cuisine type, average price, rating, and a menu of items (with vegetarian/vegan/gluten-free flags).
-- **Lunch sessions** — the core object. A session has a start/end time, can be recurring (daily/weekly), can be anonymous, and supports three voting modes (single choice, multiple choice, or 1–5 rating).
-- **Proposals & voting** — team members propose a restaurant (optionally with specific menu items) for a session, then everyone votes. Votes are 1–5, one vote per proposal per person, and you can change or delete your vote before the session closes.
-- **Suggestions (a moderation queue)** — instead of letting anyone add a proposal directly, there's a "suggestion" ticket system: a member submits a suggestion, and the team owner (or staff) approves or rejects it. Approving auto-creates the actual proposal.
-- **Winner selection** — once a session ends, the owner triggers `/result/`, which locks in a winner using whichever algorithm the session was configured with:
-  - **Majority vote** — most votes wins; ties are broken randomly.
-  - **Random draw** — a proposal is picked at random, ignoring votes entirely.
-  - **Weighted preference** — a weighted random draw where `weight = vote_count + 1`, so proposals with more votes are more likely to win but nothing is ever fully excluded.
-  
-  When a winner is picked, every team member gets a `Notification`, and if the session is recurring, the next occurrence is automatically spawned.
-- **Analytics** — per-team stats (wins by restaurant, wins by cuisine, who's actually voting) and a personal/team history of past selections, both filterable by date range.
-- **Audit log** — key actions (session creation, votes, suggestion approvals, invites, member removal, etc.) get written to `logs/audit.log` via a dedicated logger, separate from Django's normal logging.
+The complete requirement mapping and interpretation decisions are in [docs/SPECIFICATION_COVERAGE.md](docs/SPECIFICATION_COVERAGE.md). The PDF's section 10 future opportunities are outside the core scope.
 
-There are three separate static-ish pages served by Django's `TemplateView`, not the DRF API:
-- `/` — the main app (`index.html`) — team members create sessions, propose, and vote here.
-- `/food-admin/` — restaurant/menu management (`food_admin.html`).
-- `/admin-panel/` — a lightweight custom admin panel (`admin_panel.html`), separate from Django's built-in `/admin/`.
-- `/join/<token>/` — the invite-link landing page.
+## Stack
 
-## Tech stack
+Python 3.11, Django 5.2 LTS, Django REST Framework, SimpleJWT, PostgreSQL 15 (SQLite locally), Redis, Gunicorn, Nginx, pytest and coverage.py. Django 5.2 is the supported LTS successor to the PDF's Django 5.0 target. See the [Django release notes](https://docs.djangoproject.com/en/5.2/releases/5.2/).
 
-- **Django 3.2** + **Django REST Framework 3.13**, JWT auth via `djangorestframework-simplejwt`
-- SQLite by default (there's a `db.sqlite3` already sitting in the repo with seed-able demo data), swaps to **PostgreSQL** automatically if you set a `DATABASE_URL` env var
-- **Argon2** for password hashing (falls back to PBKDF2)
-- **django-ratelimit** for basic abuse protection (votes are capped at 5/minute per the settings, though check `RATELIMIT_VOTES_PER_MINUTE` and confirm it's actually wired into the vote view before relying on it)
-- **django-filter** for API filtering/search/ordering
-- **pytest** + **pytest-django** + **coverage** for tests, with a GitHub Actions CI workflow that runs `manage.py check`, a migration-drift check, and the test suite with a 70% coverage floor
-- Deploys via Docker: **Gunicorn** behind an **Nginx** reverse proxy, Postgres as a sidecar container
+Pinned dependencies are in `requirements.txt`; update them from `requirements.in` with `uv pip compile requirements.in --python-version 3.11 --output-file requirements.txt`.
 
-## Project layout
+## Run with Docker
 
-```
-lunchpicker/        # Django project config (settings, root urls, wsgi/asgi)
-accounts/           # Custom User model + JWT auth endpoints
-teams/               # Teams, memberships, invite tokens
-restaurants/         # Restaurant + MenuItem catalog
-sessions/            # LunchSession, proposals, votes, suggestions, notifications — the core app
-analytics/           # Team stats + history endpoints
-core/                # Shared permissions, the selection-algorithm logic, audit logging helper
-templates/           # index.html, food_admin.html, admin_panel.html, join.html
-static/              # admin_panel.js, food_admin.js
-tests/               # pytest suite (auth, teams, restaurants, sessions, suggestions, history)
-nginx/               # nginx.conf used in the Docker Compose stack
+```sh
+docker compose up -d --build
+docker compose exec web python manage.py seed_demo
 ```
 
-Each Django app also ships its own `tests.py` in addition to the top-level `tests/` folder — there's some overlap here, so don't be surprised if similar things are tested in two places.
+Open http://localhost/. Five services run: `db`, `cache`, `web`, `worker` and `nginx`. The worker checks ended sessions every minute. Migrations and static-file collection run when the web container starts.
 
-## Running it locally (no Docker)
+Demo users: `sabina`, `ali`, `leyla`, `reshad`; password: `lunch1234`. Sabina owns the demo team. Create a global administrator separately:
 
-You'll need Python 3.11-ish (the Dockerfile uses `python:3.11-slim`, but anything 3.9+ should work fine for local dev since nothing here is 3.11-specific).
+```sh
+docker compose exec web python manage.py createsuperuser
+```
 
-```bash
-python -m venv venv
-source venv/bin/activate        # on Windows: venv\Scripts\activate
+Configuration uses `.env` (example in `.env.example`). Set unique `POSTGRES_PASSWORD` and `DJANGO_SECRET_KEY` values before deployment. If the database volume already exists, changing the password in `.env` alone does not change the existing PostgreSQL role password.
 
+## Run locally
+
+```sh
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-
 python manage.py migrate
+python manage.py seed_demo
 python manage.py runserver
 ```
 
-Then open `http://127.0.0.1:8000/`.
+Open http://127.0.0.1:8000/. A database is created by `migrate`; no database is shipped in the repository. For automatic results outside Docker, schedule `python manage.py process_sessions` every minute. `process_recurring` remains available for recurrence-only scheduling.
 
-The repo ships with a `db.sqlite3` already in place, so `migrate` may have little or nothing to do. If you'd rather start from a clean slate, just delete `db.sqlite3` before running `migrate`.
+`DATABASE_URL` selects PostgreSQL; otherwise SQLite is used. `CACHE_URL` selects Redis; otherwise local development uses an in-process cache. Redis shares vote limits across production web workers.
 
-### Loading demo data
+## Pages
 
-There's a management command that sets up four demo users, a team, a handful of restaurants with menus, and one live voting session with some votes already cast:
+- `/`: login/signup, team/session selection, proposals, voting, results and notifications.
+- `/workspace/`: team/membership/invite management, sessions, history, analytics and profiles; administrators also see users and global settings.
+- `/food-admin/`: restaurant and menu management for administrators.
+- `/admin-panel/`: suggestion moderation for team owners and administrators.
+- `/join/<token>/`: invitation preview and authenticated join; login preserves the invitation.
+- `/admin/`: Django administration.
 
-```bash
-python manage.py seed_demo
+Django serves `templates/index.html`. The root `index.html` and `script.js` are an old static prototype and are not the running application.
+
+## Selection and privacy rules
+
+- Majority: most votes for choice sessions; greatest sum of ratings for rating sessions. Ties are random.
+- Random: uniform random proposal.
+- Weighted: a weighted draw using vote count/rating sum plus the configured positive base weight.
+- Finalization is atomic and idempotent. Results are immutable; notification and recurrence side effects run once.
+- Anonymous votes are visible only to the voter, including when the requester is an owner or administrator. Anonymous individual participation is omitted from analytics and participant indicators.
+- Vote submissions, updates and withdrawals count toward the per-user limit of five per minute. A limit violation returns HTTP 429.
+- Registration never automatically enrolls a user in a private team.
+
+## API additions
+
+Existing catalog/session routes are retained. Management routes include:
+
+```text
+GET/POST     /api/teams/
+GET/PATCH/DELETE /api/teams/{id}/
+GET/POST/PATCH/DELETE /api/teams/{id}/members/
+GET/POST     /api/teams/{id}/invite_link/
+DELETE       /api/teams/{id}/invite_links/{token}/
+GET          /api/join/{token}/preview/
+GET/POST     /api/join/{token}/
+GET/PATCH    /api/settings/
+GET          /api/analytics/system/
+GET          /api/analytics/team/{id}/
+GET          /api/analytics/history/team/{id}/
+GET          /api/analytics/history/me/
 ```
 
-It's idempotent (uses `get_or_create` everywhere), so running it twice won't duplicate anything. Demo logins are `sabina`, `ali`, `leyla`, `reshad`, all with the password `lunch1234`. `sabina` is the team owner.
+History and team analytics accept inclusive ISO `start`/`end` dates. History also accepts `restaurant` (ID or name) or `venue`. Team data requires membership or staff access. `PATCH .../members/` accepts `username` and `role`; the founding owner's membership cannot be changed.
 
-### Creating an admin account
+JWT endpoints are `/api/auth/token/`, `/api/auth/token/refresh/` and `/api/auth/token/verify/`. Send `Authorization: Bearer <access>`. Public signup is `POST /api/users/`; profile details are at `/api/users/me/` and `/api/users/{id}/`.
 
-The custom `/admin-panel/` page is separate from Django's built-in admin, but you'll likely still want the built-in one at `/admin/` for direct database poking:
+## Verify
 
-```bash
-python manage.py createsuperuser
-```
-
-## Running it with Docker
-
-```bash
-docker compose up --build
-```
-
-This spins up three containers:
-- **db** — Postgres 15, with a healthcheck so `web` waits for it to actually be ready
-- **web** — the Django app via Gunicorn, migrating automatically on container start
-- **nginx** — reverse proxy on port 80, serving static files directly and forwarding everything else to `web`
-
-Once it's up, the app is at `http://localhost/`.
-
-**Before you run this anywhere real**, change the two hardcoded secrets in `docker-compose.yml` — `POSTGRES_PASSWORD` and `DJANGO_SECRET_KEY` are both literally set to `change-me-in-prod`. They're fine for spinning things up locally to poke around, but don't ship them as-is.
-
-Also worth noting: `lunchpicker/settings.py` has `DEBUG = True` and a hardcoded `SECRET_KEY` baked in as the default — both get overridden by environment variables (`DJANGO_DEBUG`, `DJANGO_SECRET_KEY`) in the Docker setup, but if you deploy `web` some other way, make sure you're actually setting those env vars and not just running with the defaults.
-
-## Authentication
-
-This is a JWT-based API (via `djangorestframework-simplejwt`), not session/cookie auth for the API endpoints:
-
-```
-POST /api/auth/token/          # { "username": ..., "password": ... } -> access + refresh tokens
-POST /api/auth/token/refresh/  # refresh -> new access token
-POST /api/auth/token/verify/   # check if a token is still valid
-```
-
-Access tokens live for 60 minutes, refresh tokens for 7 days (see `SIMPLE_JWT` in settings). Send the access token as `Authorization: Bearer <token>` on subsequent requests. Signing up a new user is just `POST /api/users/` — that endpoint is open to unauthenticated requests (everything else on `UserViewSet` requires auth, and non-staff users can only see/edit themselves).
-
-## API surface, roughly
-
-Everything below sits under `/api/`:
-
-```
-users/                                  DRF ModelViewSet — includes /users/me/
-teams/                                  create/list/retrieve teams
-teams/{id}/invite_link/       POST      generate a /join/ link
-teams/{id}/members/            GET/POST/DELETE   manage membership
-join/{token}/preview/          GET       public — peek at a team before logging in
-join/{token}/                   GET/POST  accept an invite (requires auth)
-
-restaurants/                            catalog CRUD
-restaurants/{id}/menu-items/            nested menu item CRUD
-
-sessions/                               lunch session CRUD
-sessions/{id}/proposals/       GET/POST
-sessions/{id}/votes/            GET/POST/PUT/DELETE
-sessions/{id}/suggestions/     GET/POST
-sessions/{id}/clone/            POST     owner-only, duplicates a session as a fresh draft
-sessions/{id}/result/           GET/POST  GET to check, POST (owner-only, after end_time) to finalize
-
-suggestions/{id}/approve/      POST      owner/staff — promotes a suggestion to a real proposal
-suggestions/{id}/reject/       POST
-
-notifications/                 GET       your own notifications
-notifications/unread/          GET
-notifications/{id}/read/       POST
-notifications/read_all/        POST
-
-analytics/team/{team_id}/               aggregate stats for a team
-analytics/history/team/{team_id}/       past results for a team
-analytics/history/me/                   past results you were involved in
-```
-
-Standard DRF pagination applies (20 items/page), and most list endpoints support filtering/search/ordering via query params (`django-filter` + DRF's `SearchFilter`/`OrderingFilter`).
-
-## Running the tests
-
-```bash
-pip install pytest pytest-django coverage
+```sh
+python manage.py check
+python manage.py makemigrations --check --dry-run
 coverage run -m pytest tests/
-coverage report
+coverage report --fail-under=80
+node --test tests/frontend/api.test.cjs
 ```
 
-CI runs the same thing with `--fail-under=70`, plus a `manage.py check` and a check that no migrations are missing (`makemigrations --check --dry-run`) — so if you add or change a model field, remember to actually generate the migration before pushing, or CI will catch it.
+The same backend commands can run with `docker compose exec -T web ...` against PostgreSQL. CI checks migration drift, the backend suite/coverage, the shared browser API client and the browser workflow smoke test.
 
-## A few things worth knowing before you touch this in production
+For the browser smoke test, use a disposable seeded database and a running application:
 
-- **`DEBUG` and `SECRET_KEY` defaults are unsafe.** They're overridden by env vars in the Docker Compose file, but the fallback values in `settings.py` are not something you want live anywhere reachable.
-- **CORS isn't configured.** If you ever split the frontend off into its own origin (instead of Django serving the templates directly), you'll need to add `django-cors-headers` or similar — right now there's nothing handling cross-origin requests.
-- **The two "admin" surfaces are different things.** `/admin/` is Django's built-in admin (model-level CRUD, needs `is_staff`/`is_superuser`). `/admin-panel/` is a custom page (`admin_panel.html` + `admin_panel.js`) built specifically for this app's workflows. Don't confuse the two when giving someone access.
-- **`analytics/models.py` is currently empty** — the app exists (it's registered in `INSTALLED_APPS` and has its own `urls.py`/`views.py`) but doesn't define its own models; it just queries data that lives in the `sessions` app.
-- **The `Vote.CHOICE_LIKE` constant** is a bit of a leftover — it's defined as `1` (used as the default for `choice`), but the actual choices are the full 1–5 range for rating-style voting. Worth double-checking if you extend the voting modes.
-- **The included `db.sqlite3` has real-looking data in it already.** If you're forking this to start a fresh deployment, delete it and re-migrate rather than building on top of whatever's already seeded in there.
+```sh
+pip install -r requirements-browser.txt
+python -m playwright install chromium
+python tests/browser_smoke.py http://127.0.0.1:8000
+```
 
-## License
+## HTTPS deployment
 
-No license file is included in this archive — check with whoever owns this project before reusing or redistributing the code.
+For TLS termination at Nginx, supply certificates for your hostname and run the optional override:
+
+```sh
+# TLS_CERT_DIR contains fullchain.pem and privkey.pem.
+docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+```
+
+This redirects HTTP to HTTPS and enables secure cookies/HSTS. Set `DJANGO_ALLOWED_HOSTS` for your deployment hostname in the web environment. TLS can also terminate at a trusted load balancer; configure forwarded HTTPS headers and Django's security environment flags accordingly. The default Compose configuration is for local HTTP development.
+
+Audit events are written to `logs/audit.log` and the container console. Logs, local databases, environments and coverage output are ignored by Git.
