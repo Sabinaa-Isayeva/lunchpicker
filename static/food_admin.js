@@ -1,5 +1,4 @@
 const API = '/api';
-let accessToken = localStorage.getItem('access');
 let restaurants = [];
 let selectedRestaurant = null;
 let editingRestaurant = null, editingMenuItem = null, menuItems = [];
@@ -34,21 +33,24 @@ const cuisineLabels = { european: 'European', turkish: 'Türk', asian: 'Asiya', 
 
 // ---------- Auth gate ----------
 async function gate() {
-    if (!accessToken) return deny('Daxil olunmayıb. Əsas səhifədən daxil olun.');
+    if (!localStorage.getItem('access') && !localStorage.getItem('refresh')) return deny('Daxil olunmayıb. Əsas səhifədən daxil olun.');
     try {
         const me = await api('/users/me/');
         if (!me.is_staff) return deny('Bu səhifə yalnız adminlər üçündür.');
         document.getElementById('gate').classList.add('hidden');
         document.getElementById('appScreen').classList.remove('hidden');
-        loadRestaurants();
-    } catch (_) {
-        deny('Sessiya bitib. Əsas səhifədən yenidən daxil olun.');
+        await loadRestaurants();
+    } catch (e) {
+        deny(e.status === 401
+            ? 'Sessiya bitib. Əsas səhifədən yenidən daxil olun.'
+            : 'Səhifəni yükləmək mümkün olmadı. Yenidən cəhd edin.');
     }
 }
 
 function deny(msg) {
     document.getElementById('gateMsg').textContent = msg;
-    setTimeout(() => { window.location.href = '/'; }, 1800);
+    document.getElementById('gate').classList.remove('hidden');
+    document.getElementById('appScreen').classList.add('hidden');
 }
 
 // ---------- Restaurants ----------

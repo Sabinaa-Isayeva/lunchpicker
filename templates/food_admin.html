@@ -39,10 +39,11 @@
     </div>
 
     <!-- Access gate -->
-    <div id="gate" class="fixed inset-0 z-40 bg-slate-950 hidden items-center justify-center p-4">
+    <div id="gate" class="fixed inset-0 z-40 bg-slate-950 flex items-center justify-center p-4">
         <div class="glass-card rounded-3xl p-8 text-center max-w-sm">
             <i class="fa-solid fa-lock text-3xl text-slate-400 mb-3 block"></i>
-            <p id="gateMsg" class="text-xs font-bold text-slate-600">Yüklənir...</p>
+            <p role="status" id="gateMsg" class="text-xs font-bold text-slate-600">Yüklənir...</p>
+            <a href="/" class="inline-block mt-4 text-sm font-bold text-amber-700">Əsas səhifəyə qayıt</a>
         </div>
     </div>
 
@@ -146,7 +147,7 @@
         </main>
     </div>
 
-    <script src="/static/api.js"></script>
-<script src="/static/food_admin.js"></script>
+    <script src="/static/api.js?v=catalog-fix-1"></script>
+<script src="/static/food_admin.js?v=catalog-fix-1"></script>
 </body>
 </html>
